@@ -65,7 +65,8 @@ public:
     nvptx,   // NVPTX: 32-bit
     nvptx64, // NVPTX: 64-bit
     le32,    // le32: generic little-endian 32-bit CPU (PNaCl / Emscripten)
-    amdil   // amdil: amd IL
+    amdil,   // amdil: amd IL
+    nios2   // amdil: amd IL
   };
   enum VendorType {
     UnknownVendor,
@@ -75,7 +76,8 @@ public:
     SCEI,
     BGP,
     BGQ,
-    Freescale
+    Freescale,
+    Altera
   };
   enum OSType {
     UnknownOS,
