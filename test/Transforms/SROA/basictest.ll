@@ -1,5 +1,6 @@
 ; RUN: opt < %s -sroa -S | FileCheck %s
 ; RUN: opt < %s -sroa -force-ssa-updater -S | FileCheck %s
+
 target datalayout = "E-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n8:16:32:64"
 
 declare void @llvm.lifetime.start(i64, i8* nocapture)
@@ -753,3 +754,23 @@ entry:
   ret void
 }
 
+%opaque = type opaque
+
+define i32 @test19(%opaque* %x) {
+; This input will cause us to try to compute a natural GEP when rewriting
+; pointers in such a way that we try to GEP through the opaque type. Previously,
+; a check for an unsized type was missing and this crashed. Ensure it behaves
+; reasonably now.
+; CHECK: @test19
+; CHECK-NOT: alloca
+; CHECK: ret i32 undef
+
+entry:
+  %a = alloca { i64, i8* }
+  %cast1 = bitcast %opaque* %x to i8*
+  %cast2 = bitcast { i64, i8* }* %a to i8*
+  call void @llvm.memcpy.p0i8.p0i8.i32(i8* %cast2, i8* %cast1, i32 16, i32 1, i1 false)
+  %gep = getelementptr inbounds { i64, i8* }* %a, i32 0, i32 0
+  %val = load i64* %gep
+  ret i32 undef
+}

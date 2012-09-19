@@ -110,8 +110,13 @@ public:
     }
 
     /// \brief Support comparison with a single offset to allow binary searches.
-    bool operator<(uint64_t RHSOffset) const {
-      return BeginOffset < RHSOffset;
+    friend bool operator<(const ByteRange &LHS, uint64_t RHSOffset) {
+      return LHS.BeginOffset < RHSOffset;
+    }
+
+    friend LLVM_ATTRIBUTE_UNUSED bool operator<(uint64_t LHSOffset,
+                                                const ByteRange &RHS) {
+      return LHSOffset < RHS.BeginOffset;
     }
 
     bool operator==(const ByteRange &RHS) const {
@@ -490,7 +495,8 @@ private:
     return false;
   }
 
-  void insertUse(Instruction &I, uint64_t Size, bool IsSplittable = false) {
+  void insertUse(Instruction &I, uint64_t Offset, uint64_t Size,
+                 bool IsSplittable = false) {
     uint64_t BeginOffset = Offset, EndOffset = Offset + Size;
 
     // Completely skip uses which start outside of the allocation.
@@ -524,7 +530,7 @@ private:
     P.Partitions.push_back(New);
   }
 
-  bool handleLoadOrStore(Type *Ty, Instruction &I) {
+  bool handleLoadOrStore(Type *Ty, Instruction &I, uint64_t Offset) {
     uint64_t Size = TD.getTypeStoreSize(Ty);
 
     // If this memory access can be shown to *statically* extend outside the
@@ -544,7 +550,7 @@ private:
       return true;
     }
 
-    insertUse(I, Size);
+    insertUse(I, Offset, Size);
     return true;
   }
 
@@ -563,21 +569,27 @@ private:
   }
 
   bool visitLoadInst(LoadInst &LI) {
-    return handleLoadOrStore(LI.getType(), LI);
+    assert((!LI.isSimple() || LI.getType()->isSingleValueType()) &&
+           "All simple FCA loads should have been pre-split");
+    return handleLoadOrStore(LI.getType(), LI, Offset);
   }
 
   bool visitStoreInst(StoreInst &SI) {
-    if (SI.getOperand(0) == *U)
+    Value *ValOp = SI.getValueOperand();
+    if (ValOp == *U)
       return markAsEscaping(SI);
 
-    return handleLoadOrStore(SI.getOperand(0)->getType(), SI);
+    assert((!SI.isSimple() || ValOp->getType()->isSingleValueType()) &&
+           "All simple FCA stores should have been pre-split");
+    return handleLoadOrStore(ValOp->getType(), SI, Offset);
   }
 
 
   bool visitMemSetInst(MemSetInst &II) {
     assert(II.getRawDest() == *U && "Pointer use is not the destination?");
     ConstantInt *Length = dyn_cast<ConstantInt>(II.getLength());
-    insertUse(II, Length ? Length->getZExtValue() : AllocSize - Offset, Length);
+    uint64_t Size = Length ? Length->getZExtValue() : AllocSize - Offset;
+    insertUse(II, Offset, Size, Length);
     return true;
   }
 
@@ -602,7 +614,7 @@ private:
       Offsets.DestEnd = Offset + Size;
     }
 
-    insertUse(II, Size, Offsets.IsSplittable);
+    insertUse(II, Offset, Size, Offsets.IsSplittable);
     unsigned NewIdx = P.Partitions.size() - 1;
 
     SmallDenseMap<Instruction *, unsigned>::const_iterator PMI;
@@ -630,7 +642,7 @@ private:
         II.getIntrinsicID() == Intrinsic::lifetime_end) {
       ConstantInt *Length = cast<ConstantInt>(II.getArgOperand(0));
       uint64_t Size = std::min(AllocSize - Offset, Length->getLimitedValue());
-      insertUse(II, Size, true);
+      insertUse(II, Offset, Size, true);
       return true;
     }
 
@@ -684,7 +696,7 @@ private:
     std::pair<uint64_t, bool> &PHIInfo = P.PHIOrSelectSizes[&PN];
     if (PHIInfo.first) {
       PHIInfo.second = true;
-      insertUse(PN, PHIInfo.first);
+      insertUse(PN, Offset, PHIInfo.first);
       return true;
     }
 
@@ -692,7 +704,7 @@ private:
     if (Instruction *EscapingI = hasUnsafePHIOrSelectUse(&PN, PHIInfo.first))
       return markAsEscaping(*EscapingI);
 
-    insertUse(PN, PHIInfo.first);
+    insertUse(PN, Offset, PHIInfo.first);
     return true;
   }
 
@@ -710,7 +722,7 @@ private:
     std::pair<uint64_t, bool> &SelectInfo = P.PHIOrSelectSizes[&SI];
     if (SelectInfo.first) {
       SelectInfo.second = true;
-      insertUse(SI, SelectInfo.first);
+      insertUse(SI, Offset, SelectInfo.first);
       return true;
     }
 
@@ -718,7 +730,7 @@ private:
     if (Instruction *EscapingI = hasUnsafePHIOrSelectUse(&SI, SelectInfo.first))
       return markAsEscaping(*EscapingI);
 
-    insertUse(SI, SelectInfo.first);
+    insertUse(SI, Offset, SelectInfo.first);
     return true;
   }
 
@@ -772,7 +784,7 @@ private:
       P.DeadUsers.push_back(&I);
   }
 
-  void insertUse(uint64_t Size, Instruction &User) {
+  void insertUse(Instruction &User, uint64_t Offset, uint64_t Size) {
     uint64_t BeginOffset = Offset, EndOffset = Offset + Size;
 
     // If the use extends outside of the allocation, record it as a dead use
@@ -800,7 +812,7 @@ private:
     }
   }
 
-  void handleLoadOrStore(Type *Ty, Instruction &I) {
+  void handleLoadOrStore(Type *Ty, Instruction &I, uint64_t Offset) {
     uint64_t Size = TD.getTypeStoreSize(Ty);
 
     // If this memory access can be shown to *statically* extend outside the
@@ -810,7 +822,7 @@ private:
     if (Offset >= AllocSize || Size > AllocSize || Offset + Size > AllocSize)
       return markAsDead(I);
 
-    insertUse(Size, I);
+    insertUse(I, Offset, Size);
   }
 
   void visitBitCastInst(BitCastInst &BC) {
@@ -832,21 +844,23 @@ private:
   }
 
   void visitLoadInst(LoadInst &LI) {
-    handleLoadOrStore(LI.getType(), LI);
+    handleLoadOrStore(LI.getType(), LI, Offset);
   }
 
   void visitStoreInst(StoreInst &SI) {
-    handleLoadOrStore(SI.getOperand(0)->getType(), SI);
+    handleLoadOrStore(SI.getOperand(0)->getType(), SI, Offset);
   }
 
   void visitMemSetInst(MemSetInst &II) {
     ConstantInt *Length = dyn_cast<ConstantInt>(II.getLength());
-    insertUse(Length ? Length->getZExtValue() : AllocSize - Offset, II);
+    uint64_t Size = Length ? Length->getZExtValue() : AllocSize - Offset;
+    insertUse(II, Offset, Size);
   }
 
   void visitMemTransferInst(MemTransferInst &II) {
     ConstantInt *Length = dyn_cast<ConstantInt>(II.getLength());
-    insertUse(Length ? Length->getZExtValue() : AllocSize - Offset, II);
+    uint64_t Size = Length ? Length->getZExtValue() : AllocSize - Offset;
+    insertUse(II, Offset, Size);
   }
 
   void visitIntrinsicInst(IntrinsicInst &II) {
@@ -854,10 +868,11 @@ private:
            II.getIntrinsicID() == Intrinsic::lifetime_end);
 
     ConstantInt *Length = cast<ConstantInt>(II.getArgOperand(0));
-    insertUse(std::min(AllocSize - Offset, Length->getLimitedValue()), II);
+    insertUse(II, Offset,
+              std::min(AllocSize - Offset, Length->getLimitedValue()));
   }
 
-  void insertPHIOrSelect(Instruction &User) {
+  void insertPHIOrSelect(Instruction &User, uint64_t Offset) {
     uint64_t Size = P.PHIOrSelectSizes.lookup(&User).first;
 
     // For PHI and select operands outside the alloca, we can't nuke the entire
@@ -869,13 +884,13 @@ private:
       return;
     }
 
-    insertUse(Size, User);
+    insertUse(User, Offset, Size);
   }
   void visitPHINode(PHINode &PN) {
     if (PN.use_empty())
       return markAsDead(PN);
 
-    insertPHIOrSelect(PN);
+    insertPHIOrSelect(PN, Offset);
   }
   void visitSelectInst(SelectInst &SI) {
     if (SI.use_empty())
@@ -890,7 +905,7 @@ private:
       return;
     }
 
-    insertPHIOrSelect(SI);
+    insertPHIOrSelect(SI, Offset);
   }
 
   /// \brief Unreachable, we've already visited the alloca once.
@@ -1041,10 +1056,10 @@ AllocaPartitioning::AllocaPartitioning(const TargetData &TD, AllocaInst &AI)
 Type *AllocaPartitioning::getCommonType(iterator I) const {
   Type *Ty = 0;
   for (const_use_iterator UI = use_begin(I), UE = use_end(I); UI != UE; ++UI) {
-    if (isa<MemIntrinsic>(*UI->User))
+    if (isa<IntrinsicInst>(*UI->User))
       continue;
     if (UI->BeginOffset != I->BeginOffset || UI->EndOffset != I->EndOffset)
-      break;
+      continue;
 
     Type *UserTy = 0;
     if (LoadInst *LI = dyn_cast<LoadInst>(&*UI->User)) {
@@ -1472,6 +1487,8 @@ static Value *getNaturalGEPWithOffset(IRBuilder<> &IRB, const TargetData &TD,
     return 0;
 
   Type *ElementTy = Ty->getElementType();
+  if (!ElementTy->isSized())
+    return 0; // We can't GEP through an unsized element.
   APInt ElementSize(Offset.getBitWidth(), TD.getTypeAllocSize(ElementTy));
   if (ElementSize == 0)
     return 0; // Zero-length arrays can't help us build a natural GEP.
@@ -2399,6 +2416,216 @@ private:
 };
 }
 
+namespace {
+/// \brief Visitor to rewrite aggregate loads and stores as scalar.
+///
+/// This pass aggressively rewrites all aggregate loads and stores on
+/// a particular pointer (or any pointer derived from it which we can identify)
+/// with scalar loads and stores.
+class AggLoadStoreRewriter : public InstVisitor<AggLoadStoreRewriter, bool> {
+  // Befriend the base class so it can delegate to private visit methods.
+  friend class llvm::InstVisitor<AggLoadStoreRewriter, bool>;
+
+  const TargetData &TD;
+
+  /// Queue of pointer uses to analyze and potentially rewrite.
+  SmallVector<Use *, 8> Queue;
+
+  /// Set to prevent us from cycling with phi nodes and loops.
+  SmallPtrSet<User *, 8> Visited;
+
+  /// The current pointer use being rewritten. This is used to dig up the used
+  /// value (as opposed to the user).
+  Use *U;
+
+public:
+  AggLoadStoreRewriter(const TargetData &TD) : TD(TD) {}
+
+  /// Rewrite loads and stores through a pointer and all pointers derived from
+  /// it.
+  bool rewrite(Instruction &I) {
+    DEBUG(dbgs() << "  Rewriting FCA loads and stores...\n");
+    enqueueUsers(I);
+    bool Changed = false;
+    while (!Queue.empty()) {
+      U = Queue.pop_back_val();
+      Changed |= visit(cast<Instruction>(U->getUser()));
+    }
+    return Changed;
+  }
+
+private:
+  /// Enqueue all the users of the given instruction for further processing.
+  /// This uses a set to de-duplicate users.
+  void enqueueUsers(Instruction &I) {
+    for (Value::use_iterator UI = I.use_begin(), UE = I.use_end(); UI != UE;
+         ++UI)
+      if (Visited.insert(*UI))
+        Queue.push_back(&UI.getUse());
+  }
+
+  // Conservative default is to not rewrite anything.
+  bool visitInstruction(Instruction &I) { return false; }
+
+  /// \brief Generic recursive split emission class.
+  template <typename Derived>
+  class OpSplitter {
+  protected:
+    /// The builder used to form new instructions.
+    IRBuilder<> IRB;
+    /// The indices which to be used with insert- or extractvalue to select the
+    /// appropriate value within the aggregate.
+    SmallVector<unsigned, 4> Indices;
+    /// The indices to a GEP instruction which will move Ptr to the correct slot
+    /// within the aggregate.
+    SmallVector<Value *, 4> GEPIndices;
+    /// The base pointer of the original op, used as a base for GEPing the
+    /// split operations.
+    Value *Ptr;
+
+    /// Initialize the splitter with an insertion point, Ptr and start with a
+    /// single zero GEP index.
+    OpSplitter(Instruction *InsertionPoint, Value *Ptr)
+      : IRB(InsertionPoint), GEPIndices(1, IRB.getInt32(0)), Ptr(Ptr) {}
+
+  public:
+    /// \brief Generic recursive split emission routine.
+    ///
+    /// This method recursively splits an aggregate op (load or store) into
+    /// scalar or vector ops. It splits recursively until it hits a single value
+    /// and emits that single value operation via the template argument.
+    ///
+    /// The logic of this routine relies on GEPs and insertvalue and
+    /// extractvalue all operating with the same fundamental index list, merely
+    /// formatted differently (GEPs need actual values).
+    ///
+    /// \param Ty  The type being split recursively into smaller ops.
+    /// \param Agg The aggregate value being built up or stored, depending on
+    /// whether this is splitting a load or a store respectively.
+    void emitSplitOps(Type *Ty, Value *&Agg, const Twine &Name) {
+      if (Ty->isSingleValueType())
+        return static_cast<Derived *>(this)->emitFunc(Ty, Agg, Name);
+
+      if (ArrayType *ATy = dyn_cast<ArrayType>(Ty)) {
+        unsigned OldSize = Indices.size();
+        (void)OldSize;
+        for (unsigned Idx = 0, Size = ATy->getNumElements(); Idx != Size;
+             ++Idx) {
+          assert(Indices.size() == OldSize && "Did not return to the old size");
+          Indices.push_back(Idx);
+          GEPIndices.push_back(IRB.getInt32(Idx));
+          emitSplitOps(ATy->getElementType(), Agg, Name + "." + Twine(Idx));
+          GEPIndices.pop_back();
+          Indices.pop_back();
+        }
+        return;
+      }
+
+      if (StructType *STy = dyn_cast<StructType>(Ty)) {
+        unsigned OldSize = Indices.size();
+        (void)OldSize;
+        for (unsigned Idx = 0, Size = STy->getNumElements(); Idx != Size;
+             ++Idx) {
+          assert(Indices.size() == OldSize && "Did not return to the old size");
+          Indices.push_back(Idx);
+          GEPIndices.push_back(IRB.getInt32(Idx));
+          emitSplitOps(STy->getElementType(Idx), Agg, Name + "." + Twine(Idx));
+          GEPIndices.pop_back();
+          Indices.pop_back();
+        }
+        return;
+      }
+
+      llvm_unreachable("Only arrays and structs are aggregate loadable types");
+    }
+  };
+
+  struct LoadOpSplitter : public OpSplitter<LoadOpSplitter> {
+    LoadOpSplitter(Instruction *InsertionPoint, Value *Ptr)
+      : OpSplitter<LoadOpSplitter>(InsertionPoint, Ptr) {}
+
+    /// Emit a leaf load of a single value. This is called at the leaves of the
+    /// recursive emission to actually load values.
+    void emitFunc(Type *Ty, Value *&Agg, const Twine &Name) {
+      assert(Ty->isSingleValueType());
+      // Load the single value and insert it using the indices.
+      Value *Load = IRB.CreateLoad(IRB.CreateInBoundsGEP(Ptr, GEPIndices,
+                                                         Name + ".gep"),
+                                   Name + ".load");
+      Agg = IRB.CreateInsertValue(Agg, Load, Indices, Name + ".insert");
+      DEBUG(dbgs() << "          to: " << *Load << "\n");
+    }
+  };
+
+  bool visitLoadInst(LoadInst &LI) {
+    assert(LI.getPointerOperand() == *U);
+    if (!LI.isSimple() || LI.getType()->isSingleValueType())
+      return false;
+
+    // We have an aggregate being loaded, split it apart.
+    DEBUG(dbgs() << "    original: " << LI << "\n");
+    LoadOpSplitter Splitter(&LI, *U);
+    Value *V = UndefValue::get(LI.getType());
+    Splitter.emitSplitOps(LI.getType(), V, LI.getName() + ".fca");
+    LI.replaceAllUsesWith(V);
+    LI.eraseFromParent();
+    return true;
+  }
+
+  struct StoreOpSplitter : public OpSplitter<StoreOpSplitter> {
+    StoreOpSplitter(Instruction *InsertionPoint, Value *Ptr)
+      : OpSplitter<StoreOpSplitter>(InsertionPoint, Ptr) {}
+
+    /// Emit a leaf store of a single value. This is called at the leaves of the
+    /// recursive emission to actually produce stores.
+    void emitFunc(Type *Ty, Value *&Agg, const Twine &Name) {
+      assert(Ty->isSingleValueType());
+      // Extract the single value and store it using the indices.
+      Value *Store = IRB.CreateStore(
+        IRB.CreateExtractValue(Agg, Indices, Name + ".extract"),
+        IRB.CreateInBoundsGEP(Ptr, GEPIndices, Name + ".gep"));
+      (void)Store;
+      DEBUG(dbgs() << "          to: " << *Store << "\n");
+    }
+  };
+
+  bool visitStoreInst(StoreInst &SI) {
+    if (!SI.isSimple() || SI.getPointerOperand() != *U)
+      return false;
+    Value *V = SI.getValueOperand();
+    if (V->getType()->isSingleValueType())
+      return false;
+
+    // We have an aggregate being stored, split it apart.
+    DEBUG(dbgs() << "    original: " << SI << "\n");
+    StoreOpSplitter Splitter(&SI, *U);
+    Splitter.emitSplitOps(V->getType(), V, V->getName() + ".fca");
+    SI.eraseFromParent();
+    return true;
+  }
+
+  bool visitBitCastInst(BitCastInst &BC) {
+    enqueueUsers(BC);
+    return false;
+  }
+
+  bool visitGetElementPtrInst(GetElementPtrInst &GEPI) {
+    enqueueUsers(GEPI);
+    return false;
+  }
+
+  bool visitPHINode(PHINode &PN) {
+    enqueueUsers(PN);
+    return false;
+  }
+
+  bool visitSelectInst(SelectInst &SI) {
+    enqueueUsers(SI);
+    return false;
+  }
+};
+}
+
 /// \brief Try to find a partition of the aggregate type passed in for a given
 /// offset and size.
 ///
@@ -2627,18 +2854,24 @@ bool SROA::runOnAlloca(AllocaInst &AI) {
     return false;
   }
 
+  bool Changed = false;
+
+  // First, split any FCA loads and stores touching this alloca to promote
+  // better splitting and promotion opportunities.
+  AggLoadStoreRewriter AggRewriter(*TD);
+  Changed |= AggRewriter.rewrite(AI);
+
   // Build the partition set using a recursive instruction-visiting builder.
   AllocaPartitioning P(*TD, AI);
   DEBUG(P.print(dbgs()));
   if (P.isEscaped())
-    return false;
+    return Changed;
 
   // No partitions to split. Leave the dead alloca for a later pass to clean up.
   if (P.begin() == P.end())
-    return false;
+    return Changed;
 
   // Delete all the dead users of this alloca before splitting and rewriting it.
-  bool Changed = false;
   for (AllocaPartitioning::dead_user_iterator DI = P.dead_user_begin(),
                                               DE = P.dead_user_end();
        DI != DE; ++DI) {

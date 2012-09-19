@@ -83,7 +83,7 @@ struct CodeGenSchedRW {
 #endif
 };
 
-/// Represent a transition between SchedClasses induced by SchedWriteVariant.
+/// Represent a transition between SchedClasses induced by SchedVariant.
 struct CodeGenSchedTransition {
   unsigned ToClassIdx;
   IdxVec ProcIndices;
@@ -284,6 +284,9 @@ public:
 
   unsigned getSchedRWIdx(Record *Def, bool IsRead, unsigned After = 0) const;
 
+  // Return true if the given write record is referenced by a ReadAdvance.
+  bool hasReadOfWrite(Record *WriteDef) const;
+
   // Check if any instructions are assigned to an explicit itinerary class other
   // than NoItinerary.
   bool hasItineraryClasses() const { return NumItineraryClasses > 0; }
@@ -302,15 +305,6 @@ public:
   const CodeGenSchedClass &getSchedClass(unsigned Idx) const {
     assert(Idx < SchedClasses.size() && "bad SchedClass index");
     return SchedClasses[Idx];
-  }
-
-  // Get an itinerary class's index. Value indices are '0' for NoItinerary up to
-  // and including numItineraryClasses().
-  unsigned getItinClassIdx(Record *ItinDef) const {
-    assert(SchedClassIdxMap.count(ItinDef->getName()) && "missing ItinClass");
-    unsigned Idx = SchedClassIdxMap.lookup(ItinDef->getName());
-    assert(Idx <= NumItineraryClasses && "bad ItinClass index");
-    return Idx;
   }
 
   // Get the SchedClass index for an instruction. Instructions with no

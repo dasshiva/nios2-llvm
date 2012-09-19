@@ -270,6 +270,21 @@ unsigned CodeGenSchedModels::getSchedRWIdx(Record *Def, bool IsRead,
   return 0;
 }
 
+bool CodeGenSchedModels::hasReadOfWrite(Record *WriteDef) const {
+  for (unsigned i = 0, e = SchedReads.size(); i < e; ++i) {
+    Record *ReadDef = SchedReads[i].TheDef;
+    if (!ReadDef || !ReadDef->isSubClassOf("ProcReadAdvance"))
+      continue;
+
+    RecVec ValidWrites = ReadDef->getValueAsListOfDefs("ValidWrites");
+    if (std::find(ValidWrites.begin(), ValidWrites.end(), WriteDef)
+        != ValidWrites.end()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 namespace llvm {
 void splitSchedReadWrites(const RecVec &RWDefs,
                           RecVec &WriteDefs, RecVec &ReadDefs) {
@@ -1272,6 +1287,16 @@ void CodeGenSchedModels::addReadAdvance(Record *ProcReadAdvanceDef,
   if (I != RADefs.end())
     return;
   RADefs.push_back(ProcReadAdvanceDef);
+}
+
+unsigned CodeGenProcModel::getProcResourceIdx(Record *PRDef) const {
+  RecIter PRPos = std::find(ProcResourceDefs.begin(), ProcResourceDefs.end(),
+                            PRDef);
+  if (PRPos == ProcResourceDefs.end())
+    throw TGError(PRDef->getLoc(), "ProcResource def is not included in "
+                  "the ProcResources list for " + ModelName);
+  // Idx=0 is reserved for invalid.
+  return 1 + PRPos - ProcResourceDefs.begin();
 }
 
 #ifndef NDEBUG

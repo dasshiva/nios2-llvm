@@ -1796,7 +1796,7 @@ bool llvm::FoldBranchToCommonDest(BranchInst *BI) {
       continue;
 
     // Determine if the two branches share a common destination.
-    Instruction::BinaryOps Opc;
+    Instruction::BinaryOps Opc = Instruction::BinaryOpsEnd;
     bool InvertPredCond = false;
 
     if (BI->isConditional()) {
@@ -2150,6 +2150,33 @@ static bool SimplifyCondBranchToCondBranch(BranchInst *PBI, BranchInst *BI) {
   PBI->setSuccessor(0, CommonDest);
   PBI->setSuccessor(1, OtherDest);
 
+  // Update branch weight for PBI.
+  uint64_t PredTrueWeight, PredFalseWeight, SuccTrueWeight, SuccFalseWeight;
+  bool PredHasWeights = ExtractBranchMetadata(PBI, PredTrueWeight,
+                                              PredFalseWeight);
+  bool SuccHasWeights = ExtractBranchMetadata(BI, SuccTrueWeight,
+                                              SuccFalseWeight);
+  if (PredHasWeights && SuccHasWeights) {
+    uint64_t PredCommon = PBIOp ? PredFalseWeight : PredTrueWeight;
+    uint64_t PredOther = PBIOp ?PredTrueWeight : PredFalseWeight;
+    uint64_t SuccCommon = BIOp ? SuccFalseWeight : SuccTrueWeight;
+    uint64_t SuccOther = BIOp ? SuccTrueWeight : SuccFalseWeight;
+    // The weight to CommonDest should be PredCommon * SuccTotal +
+    //                                    PredOther * SuccCommon.
+    // The weight to OtherDest should be PredOther * SuccOther.
+    SmallVector<uint64_t, 2> NewWeights;
+    NewWeights.push_back(PredCommon * (SuccCommon + SuccOther) +
+                         PredOther * SuccCommon);
+    NewWeights.push_back(PredOther * SuccOther);
+    // Halve the weights if any of them cannot fit in an uint32_t
+    FitWeights(NewWeights);
+
+    SmallVector<uint32_t, 2> MDWeights(NewWeights.begin(),NewWeights.end());
+    PBI->setMetadata(LLVMContext::MD_prof,
+                     MDBuilder(BI->getContext()).
+                     createBranchWeights(MDWeights));
+  }
+
   // OtherDest may have phi nodes.  If so, add an entry from PBI's
   // block that are identical to the entries for BI's block.
   AddPredecessorToBlock(OtherDest, PBI->getParent(), BB);
@@ -2186,7 +2213,9 @@ static bool SimplifyCondBranchToCondBranch(BranchInst *PBI, BranchInst *BI) {
 // Also makes sure not to introduce new successors by assuming that edges to
 // non-successor TrueBBs and FalseBBs aren't reachable.
 static bool SimplifyTerminatorOnSelect(TerminatorInst *OldTerm, Value *Cond,
-                                       BasicBlock *TrueBB, BasicBlock *FalseBB){
+                                       BasicBlock *TrueBB, BasicBlock *FalseBB,
+                                       uint32_t TrueWeight,
+                                       uint32_t FalseWeight){
   // Remove any superfluous successor edges from the CFG.
   // First, figure out which successors to preserve.
   // If TrueBB and FalseBB are equal, only try to preserve one copy of that
@@ -2215,10 +2244,15 @@ static bool SimplifyTerminatorOnSelect(TerminatorInst *OldTerm, Value *Cond,
       // We were only looking for one successor, and it was present.
       // Create an unconditional branch to it.
       Builder.CreateBr(TrueBB);
-    else
+    else {
       // We found both of the successors we were looking for.
       // Create a conditional branch sharing the condition of the select.
-      Builder.CreateCondBr(Cond, TrueBB, FalseBB);
+      BranchInst *NewBI = Builder.CreateCondBr(Cond, TrueBB, FalseBB);
+      if (TrueWeight != FalseWeight)
+        NewBI->setMetadata(LLVMContext::MD_prof,
+                           MDBuilder(OldTerm->getContext()).
+                           createBranchWeights(TrueWeight, FalseWeight));
+    }
   } else if (KeepEdge1 && (KeepEdge2 || TrueBB == FalseBB)) {
     // Neither of the selected blocks were successors, so this
     // terminator must be unreachable.
@@ -2255,8 +2289,23 @@ static bool SimplifySwitchOnSelect(SwitchInst *SI, SelectInst *Select) {
   BasicBlock *TrueBB = SI->findCaseValue(TrueVal).getCaseSuccessor();
   BasicBlock *FalseBB = SI->findCaseValue(FalseVal).getCaseSuccessor();
 
+  // Get weight for TrueBB and FalseBB.
+  uint32_t TrueWeight = 0, FalseWeight = 0;
+  SmallVector<uint64_t, 8> Weights;
+  bool HasWeights = HasBranchWeights(SI);
+  if (HasWeights) {
+    GetBranchWeights(SI, Weights);
+    if (Weights.size() == 1 + SI->getNumCases()) {
+      TrueWeight = (uint32_t)Weights[SI->findCaseValue(TrueVal).
+                                     getSuccessorIndex()];
+      FalseWeight = (uint32_t)Weights[SI->findCaseValue(FalseVal).
+                                      getSuccessorIndex()];
+    }
+  }
+
   // Perform the actual simplification.
-  return SimplifyTerminatorOnSelect(SI, Condition, TrueBB, FalseBB);
+  return SimplifyTerminatorOnSelect(SI, Condition, TrueBB, FalseBB,
+                                    TrueWeight, FalseWeight);
 }
 
 // SimplifyIndirectBrOnSelect - Replaces
@@ -2276,7 +2325,8 @@ static bool SimplifyIndirectBrOnSelect(IndirectBrInst *IBI, SelectInst *SI) {
   BasicBlock *FalseBB = FBA->getBasicBlock();
 
   // Perform the actual simplification.
-  return SimplifyTerminatorOnSelect(IBI, SI->getCondition(), TrueBB, FalseBB);
+  return SimplifyTerminatorOnSelect(IBI, SI->getCondition(), TrueBB, FalseBB,
+                                    0, 0);
 }
 
 /// TryToSimplifyUncondBranchWithICmpInIt - This is called when we find an icmp
@@ -2375,6 +2425,21 @@ static bool TryToSimplifyUncondBranchWithICmpInIt(ICmpInst *ICI,
   // the switch to the merge point on the compared value.
   BasicBlock *NewBB = BasicBlock::Create(BB->getContext(), "switch.edge",
                                          BB->getParent(), BB);
+  SmallVector<uint64_t, 8> Weights;
+  bool HasWeights = HasBranchWeights(SI);
+  if (HasWeights) {
+    GetBranchWeights(SI, Weights);
+    if (Weights.size() == 1 + SI->getNumCases()) {
+      // Split weight for default case to case for "Cst".
+      Weights[0] = (Weights[0]+1) >> 1;
+      Weights.push_back(Weights[0]);
+
+      SmallVector<uint32_t, 8> MDWeights(Weights.begin(), Weights.end());
+      SI->setMetadata(LLVMContext::MD_prof,
+                      MDBuilder(SI->getContext()).
+                      createBranchWeights(MDWeights));
+    }
+  }
   SI->addCase(Cst, NewBB);
 
   // NewBB branches to the phi block, add the uncond branch and the phi entry.
@@ -2788,8 +2853,27 @@ static bool TurnSwitchRangeIntoICmp(SwitchInst *SI, IRBuilder<> &Builder) {
   if (!Offset->isNullValue())
     Sub = Builder.CreateAdd(Sub, Offset, Sub->getName()+".off");
   Value *Cmp = Builder.CreateICmpULT(Sub, NumCases, "switch");
-  Builder.CreateCondBr(
+  BranchInst *NewBI = Builder.CreateCondBr(
       Cmp, SI->case_begin().getCaseSuccessor(), SI->getDefaultDest());
+
+  // Update weight for the newly-created conditional branch.
+  SmallVector<uint64_t, 8> Weights;
+  bool HasWeights = HasBranchWeights(SI);
+  if (HasWeights) {
+    GetBranchWeights(SI, Weights);
+    if (Weights.size() == 1 + SI->getNumCases()) {
+      // Combine all weights for the cases to be the true weight of NewBI.
+      // We assume that the sum of all weights for a Terminator can fit into 32
+      // bits.
+      uint32_t NewTrueWeight = 0;
+      for (unsigned I = 1, E = Weights.size(); I != E; ++I)
+        NewTrueWeight += (uint32_t)Weights[I];
+      NewBI->setMetadata(LLVMContext::MD_prof,
+                         MDBuilder(SI->getContext()).
+                         createBranchWeights(NewTrueWeight,
+                                             (uint32_t)Weights[0]));
+    }
+  }
 
   // Prune obsolete incoming values off the successor's PHI nodes.
   for (BasicBlock::iterator BBI = SI->case_begin().getCaseSuccessor()->begin();
@@ -2821,14 +2905,32 @@ static bool EliminateDeadSwitchCases(SwitchInst *SI) {
     }
   }
 
+  SmallVector<uint64_t, 8> Weights;
+  bool HasWeight = HasBranchWeights(SI);
+  if (HasWeight) {
+    GetBranchWeights(SI, Weights);
+    HasWeight = (Weights.size() == 1 + SI->getNumCases());
+  }
+
   // Remove dead cases from the switch.
   for (unsigned I = 0, E = DeadCases.size(); I != E; ++I) {
     SwitchInst::CaseIt Case = SI->findCaseValue(DeadCases[I]);
     assert(Case != SI->case_default() &&
            "Case was not found. Probably mistake in DeadCases forming.");
+    if (HasWeight) {
+      std::swap(Weights[Case.getCaseIndex()+1], Weights.back());
+      Weights.pop_back();
+    }
+
     // Prune unused values from PHI nodes.
     Case.getCaseSuccessor()->removePredecessor(SI->getParent());
     SI->removeCase(Case);
+  }
+  if (HasWeight) {
+    SmallVector<uint32_t, 8> MDWeights(Weights.begin(), Weights.end());
+    SI->setMetadata(LLVMContext::MD_prof,
+                    MDBuilder(SI->getParent()->getContext()).
+                    createBranchWeights(MDWeights));
   }
 
   return !DeadCases.empty();
@@ -3156,17 +3258,16 @@ static bool SwitchToLookupTable(SwitchInst *SI,
                                            "switch.gep");
     Value *Result = Builder.CreateLoad(GEP, "switch.load");
 
-    // If the result is only going to be used to return from the function,
-    // we want to do that right here.
-    if (PHI->hasOneUse() && isa<ReturnInst>(*PHI->use_begin())) {
-      if (CommonDest->getFirstNonPHIOrDbg() == CommonDest->getTerminator()) {
-        Builder.CreateRet(Result);
-        ReturnedEarly = true;
-      }
+    // If the result is used to return immediately from the function, we want to
+    // do that right here.
+    if (PHI->hasOneUse() && isa<ReturnInst>(*PHI->use_begin()) &&
+        *PHI->use_begin() == CommonDest->getFirstNonPHIOrDbg()) {
+      Builder.CreateRet(Result);
+      ReturnedEarly = true;
+      break;
     }
 
-    if (!ReturnedEarly)
-      PHI->addIncoming(Result, LookupBB);
+    PHI->addIncoming(Result, LookupBB);
   }
 
   if (!ReturnedEarly)
