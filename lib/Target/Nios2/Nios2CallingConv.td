@@ -15,7 +15,6 @@
 
 // The rules for argument passing are defined in Nios2ISelLowering.cpp.
 def RetCC_Nios2Std : CallingConv<[
-  // i32 are returned in registers V0, V1, A0, A1
   CCIfType<[i32], CCAssignToReg<[R2, R3]> >
 ]>;
 
@@ -30,7 +29,7 @@ def CC_Nios2Std : CallingConv<[
   // Integer arguments are passed in integer registers.
   CCIfType<[i32], CCAssignToReg<[R4, R5, R6, R7]>>,
 
-  CCIfType<[i32, f32], CCAssignToStack<4, 4>>
+  CCIfType<[i32], CCAssignToStack<4, 4>>
 ]>;
 
 //===----------------------------------------------------------------------===//

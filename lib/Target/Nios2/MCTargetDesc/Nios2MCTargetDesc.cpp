@@ -86,32 +86,24 @@ static MCInstPrinter *createNios2MCInstPrinter(const Target &T,
 
 extern "C" void LLVMInitializeNios2TargetMC() {
   // Register the MC asm info.
-  RegisterMCAsmInfoFn X(TheNios2Target, createNios2MCAsmInfo);
-  RegisterMCAsmInfoFn Y(TheNios2StdTarget, createNios2MCAsmInfo);
+  RegisterMCAsmInfoFn X(TheNios2StdTarget, createNios2MCAsmInfo);
 
   // Register the MC codegen info.
-  TargetRegistry::RegisterMCCodeGenInfo(TheNios2Target,
-                                        createNios2MCCodeGenInfo);
   TargetRegistry::RegisterMCCodeGenInfo(TheNios2StdTarget,
                                         createNios2MCCodeGenInfo);
 
   // Register the MC instruction info.
-  TargetRegistry::RegisterMCInstrInfo(TheNios2Target, createNios2MCInstrInfo);
   TargetRegistry::RegisterMCInstrInfo(TheNios2StdTarget, createNios2MCInstrInfo);
 
   // Register the MC register info.
-  TargetRegistry::RegisterMCRegInfo(TheNios2Target, createNios2MCRegisterInfo);
   TargetRegistry::RegisterMCRegInfo(TheNios2StdTarget, createNios2MCRegisterInfo);
 
   // Register the MC subtarget info.
-  TargetRegistry::RegisterMCSubtargetInfo(TheNios2Target,
-                                          createNios2MCSubtargetInfo);
   TargetRegistry::RegisterMCSubtargetInfo(TheNios2StdTarget,
                                           createNios2MCSubtargetInfo);
 
   // Register the MCInstPrinter.
-  TargetRegistry::RegisterMCInstPrinter(TheNios2Target,
-                                        createNios2MCInstPrinter);
   TargetRegistry::RegisterMCInstPrinter(TheNios2StdTarget,
                                         createNios2MCInstPrinter);
 }
+

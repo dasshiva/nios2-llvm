@@ -59,6 +59,12 @@ public:
     OutArgFIRange(std::make_pair(-1, 0)), MaxCallFrameSize(0), EmitNOAT(false)
   {}
 
+  unsigned getSRetReturnReg() const { return SRetReturnReg; }
+  void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
+
+  int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
+  void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
   bool isInArgFI(int FI) const {
     return FI <= InArgFIRange.first && FI >= InArgFIRange.second;
   }
@@ -78,6 +84,8 @@ public:
   unsigned getGlobalBaseReg();
   bool getEmitNOAT() const { return EmitNOAT; }
   void setEmitNOAT() { EmitNOAT = true; }
+  unsigned getMaxCallFrameSize() const { return MaxCallFrameSize; }
+  void setMaxCallFrameSize(unsigned S) { MaxCallFrameSize = S; }
 };
 
 } // end of namespace llvm

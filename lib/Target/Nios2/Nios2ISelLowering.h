@@ -38,6 +38,8 @@ namespace llvm {
 
       GPRel,
 
+      JmpLink,
+
       Wrapper,
 
       Sync

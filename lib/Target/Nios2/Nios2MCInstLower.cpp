@@ -36,33 +36,33 @@ void Nios2MCInstLower::Initialize(Mangler *M, MCContext *C) {
 MCOperand Nios2MCInstLower::LowerSymbolOperand(const MachineOperand &MO,
                                               MachineOperandType MOTy,
                                               unsigned Offset) const {
-  MCSymbolRefExpr::VariantKind Kind;
+  //MCSymbolRefExpr::VariantKind Kind;
   const MCSymbol *Symbol;
 
-  switch(MO.getTargetFlags()) {
-  default:                   llvm_unreachable("Invalid target flag!");
-  case Nios2II::MO_NO_FLAG:   Kind = MCSymbolRefExpr::VK_None; break;
-  case Nios2II::MO_GPREL:     Kind = MCSymbolRefExpr::VK_Nios2_GPREL; break;
-  case Nios2II::MO_GOT_CALL:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_CALL; break;
-  case Nios2II::MO_GOT16:     Kind = MCSymbolRefExpr::VK_Nios2_GOT16; break;
-  case Nios2II::MO_GOT:       Kind = MCSymbolRefExpr::VK_Nios2_GOT; break;
-  case Nios2II::MO_ABS_HI:    Kind = MCSymbolRefExpr::VK_Nios2_ABS_HI; break;
-  case Nios2II::MO_ABS_LO:    Kind = MCSymbolRefExpr::VK_Nios2_ABS_LO; break;
-  case Nios2II::MO_TLSGD:     Kind = MCSymbolRefExpr::VK_Nios2_TLSGD; break;
-  case Nios2II::MO_TLSLDM:    Kind = MCSymbolRefExpr::VK_Nios2_TLSLDM; break;
-  case Nios2II::MO_DTPREL_HI: Kind = MCSymbolRefExpr::VK_Nios2_DTPREL_HI; break;
-  case Nios2II::MO_DTPREL_LO: Kind = MCSymbolRefExpr::VK_Nios2_DTPREL_LO; break;
-  case Nios2II::MO_GOTTPREL:  Kind = MCSymbolRefExpr::VK_Nios2_GOTTPREL; break;
-  case Nios2II::MO_TPREL_HI:  Kind = MCSymbolRefExpr::VK_Nios2_TPREL_HI; break;
-  case Nios2II::MO_TPREL_LO:  Kind = MCSymbolRefExpr::VK_Nios2_TPREL_LO; break;
-  case Nios2II::MO_GPOFF_HI:  Kind = MCSymbolRefExpr::VK_Nios2_GPOFF_HI; break;
-  case Nios2II::MO_GPOFF_LO:  Kind = MCSymbolRefExpr::VK_Nios2_GPOFF_LO; break;
-  case Nios2II::MO_GOT_DISP:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_DISP; break;
-  case Nios2II::MO_GOT_PAGE:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_PAGE; break;
-  case Nios2II::MO_GOT_OFST:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_OFST; break;
-  case Nios2II::MO_HIGHER:    Kind = MCSymbolRefExpr::VK_Nios2_HIGHER; break;
-  case Nios2II::MO_HIGHEST:   Kind = MCSymbolRefExpr::VK_Nios2_HIGHEST; break;
-  }
+//  switch(MO.getTargetFlags()) {
+//  default:                   llvm_unreachable("Invalid target flag!");
+//  case Nios2II::MO_NO_FLAG:   Kind = MCSymbolRefExpr::VK_None; break;
+//  case Nios2II::MO_GPREL:     Kind = MCSymbolRefExpr::VK_Nios2_GPREL; break;
+//  case Nios2II::MO_GOT_CALL:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_CALL; break;
+//  case Nios2II::MO_GOT16:     Kind = MCSymbolRefExpr::VK_Nios2_GOT16; break;
+//  case Nios2II::MO_GOT:       Kind = MCSymbolRefExpr::VK_Nios2_GOT; break;
+//  case Nios2II::MO_ABS_HI:    Kind = MCSymbolRefExpr::VK_Nios2_ABS_HI; break;
+//  case Nios2II::MO_ABS_LO:    Kind = MCSymbolRefExpr::VK_Nios2_ABS_LO; break;
+//  case Nios2II::MO_TLSGD:     Kind = MCSymbolRefExpr::VK_Nios2_TLSGD; break;
+//  case Nios2II::MO_TLSLDM:    Kind = MCSymbolRefExpr::VK_Nios2_TLSLDM; break;
+//  case Nios2II::MO_DTPREL_HI: Kind = MCSymbolRefExpr::VK_Nios2_DTPREL_HI; break;
+//  case Nios2II::MO_DTPREL_LO: Kind = MCSymbolRefExpr::VK_Nios2_DTPREL_LO; break;
+//  case Nios2II::MO_GOTTPREL:  Kind = MCSymbolRefExpr::VK_Nios2_GOTTPREL; break;
+//  case Nios2II::MO_TPREL_HI:  Kind = MCSymbolRefExpr::VK_Nios2_TPREL_HI; break;
+//  case Nios2II::MO_TPREL_LO:  Kind = MCSymbolRefExpr::VK_Nios2_TPREL_LO; break;
+//  case Nios2II::MO_GPOFF_HI:  Kind = MCSymbolRefExpr::VK_Nios2_GPOFF_HI; break;
+//  case Nios2II::MO_GPOFF_LO:  Kind = MCSymbolRefExpr::VK_Nios2_GPOFF_LO; break;
+//  case Nios2II::MO_GOT_DISP:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_DISP; break;
+//  case Nios2II::MO_GOT_PAGE:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_PAGE; break;
+//  case Nios2II::MO_GOT_OFST:  Kind = MCSymbolRefExpr::VK_Nios2_GOT_OFST; break;
+//  case Nios2II::MO_HIGHER:    Kind = MCSymbolRefExpr::VK_Nios2_HIGHER; break;
+//  case Nios2II::MO_HIGHEST:   Kind = MCSymbolRefExpr::VK_Nios2_HIGHEST; break;
+//  }
 
   switch (MOTy) {
   case MachineOperand::MO_MachineBasicBlock:
@@ -97,7 +97,8 @@ MCOperand Nios2MCInstLower::LowerSymbolOperand(const MachineOperand &MO,
     llvm_unreachable("<unknown operand type>");
   }
 
-  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::Create(Symbol, Kind, *Ctx);
+  //const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::Create(Symbol, Kind, *Ctx);
+  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::Create(Symbol, *Ctx);
 
   if (!Offset)
     return MCOperand::CreateExpr(MCSym);

@@ -69,25 +69,25 @@ void Nios2InstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
 
 void Nios2InstPrinter::printInst(const MCInst *MI, raw_ostream &O,
                                 StringRef Annot) {
-  switch (MI->getOpcode()) {
-  default:
-    break;
-  case Nios2::RDHWR:
-  case Nios2::RDHWR64:
-    O << "\t.set\tpush\n";
-    O << "\t.set\tmips32r2\n";
-  }
+  //switch (MI->getOpcode()) {
+  //default:
+  //  break;
+  //case Nios2::RDHWR:
+  //case Nios2::RDHWR64:
+  //  O << "\t.set\tpush\n";
+  //  O << "\t.set\tmips32r2\n";
+  //}
 
   printInstruction(MI, O);
   printAnnotation(O, Annot);
 
-  switch (MI->getOpcode()) {
-  default:
-    break;
-  case Nios2::RDHWR:
-  case Nios2::RDHWR64:
-    O << "\n\t.set\tpop";
-  }
+  //switch (MI->getOpcode()) {
+  //default:
+  //  break;
+  //case Nios2::RDHWR:
+  //case Nios2::RDHWR64:
+  //  O << "\n\t.set\tpop";
+  //}
 }
 
 static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
@@ -103,32 +103,32 @@ static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
   else if (!(SRE = dyn_cast<MCSymbolRefExpr>(Expr)))
     assert(false && "Unexpected MCExpr type.");
 
-  MCSymbolRefExpr::VariantKind Kind = SRE->getKind();
+  //MCSymbolRefExpr::VariantKind Kind = SRE->getKind();
 
-  switch (Kind) {
-  default:                                 llvm_unreachable("Invalid kind!");
-  case MCSymbolRefExpr::VK_None:           break;
-  case MCSymbolRefExpr::VK_Nios2_GPREL:     OS << "%gp_rel("; break;
-  case MCSymbolRefExpr::VK_Nios2_GOT_CALL:  OS << "%call16("; break;
-  case MCSymbolRefExpr::VK_Nios2_GOT16:     OS << "%got(";    break;
-  case MCSymbolRefExpr::VK_Nios2_GOT:       OS << "%got(";    break;
-  case MCSymbolRefExpr::VK_Nios2_ABS_HI:    OS << "%hi(";     break;
-  case MCSymbolRefExpr::VK_Nios2_ABS_LO:    OS << "%lo(";     break;
-  case MCSymbolRefExpr::VK_Nios2_TLSGD:     OS << "%tlsgd(";  break;
-  case MCSymbolRefExpr::VK_Nios2_TLSLDM:    OS << "%tlsldm(";  break;
-  case MCSymbolRefExpr::VK_Nios2_DTPREL_HI: OS << "%dtprel_hi(";  break;
-  case MCSymbolRefExpr::VK_Nios2_DTPREL_LO: OS << "%dtprel_lo(";  break;
-  case MCSymbolRefExpr::VK_Nios2_GOTTPREL:  OS << "%gottprel("; break;
-  case MCSymbolRefExpr::VK_Nios2_TPREL_HI:  OS << "%tprel_hi("; break;
-  case MCSymbolRefExpr::VK_Nios2_TPREL_LO:  OS << "%tprel_lo("; break;
-  case MCSymbolRefExpr::VK_Nios2_GPOFF_HI:  OS << "%hi(%neg(%gp_rel("; break;
-  case MCSymbolRefExpr::VK_Nios2_GPOFF_LO:  OS << "%lo(%neg(%gp_rel("; break;
-  case MCSymbolRefExpr::VK_Nios2_GOT_DISP:  OS << "%got_disp("; break;
-  case MCSymbolRefExpr::VK_Nios2_GOT_PAGE:  OS << "%got_page("; break;
-  case MCSymbolRefExpr::VK_Nios2_GOT_OFST:  OS << "%got_ofst("; break;
-  case MCSymbolRefExpr::VK_Nios2_HIGHER:    OS << "%higher("; break;
-  case MCSymbolRefExpr::VK_Nios2_HIGHEST:   OS << "%highest("; break;
-  }
+  //switch (Kind) {
+  //default:                                 llvm_unreachable("Invalid kind!");
+  //case MCSymbolRefExpr::VK_None:           break;
+  //case MCSymbolRefExpr::VK_Nios2_GPREL:     OS << "%gp_rel("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GOT_CALL:  OS << "%call16("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GOT16:     OS << "%got(";    break;
+  //case MCSymbolRefExpr::VK_Nios2_GOT:       OS << "%got(";    break;
+  //case MCSymbolRefExpr::VK_Nios2_ABS_HI:    OS << "%hi(";     break;
+  //case MCSymbolRefExpr::VK_Nios2_ABS_LO:    OS << "%lo(";     break;
+  //case MCSymbolRefExpr::VK_Nios2_TLSGD:     OS << "%tlsgd(";  break;
+  //case MCSymbolRefExpr::VK_Nios2_TLSLDM:    OS << "%tlsldm(";  break;
+  //case MCSymbolRefExpr::VK_Nios2_DTPREL_HI: OS << "%dtprel_hi(";  break;
+  //case MCSymbolRefExpr::VK_Nios2_DTPREL_LO: OS << "%dtprel_lo(";  break;
+  //case MCSymbolRefExpr::VK_Nios2_GOTTPREL:  OS << "%gottprel("; break;
+  //case MCSymbolRefExpr::VK_Nios2_TPREL_HI:  OS << "%tprel_hi("; break;
+  //case MCSymbolRefExpr::VK_Nios2_TPREL_LO:  OS << "%tprel_lo("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GPOFF_HI:  OS << "%hi(%neg(%gp_rel("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GPOFF_LO:  OS << "%lo(%neg(%gp_rel("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GOT_DISP:  OS << "%got_disp("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GOT_PAGE:  OS << "%got_page("; break;
+  //case MCSymbolRefExpr::VK_Nios2_GOT_OFST:  OS << "%got_ofst("; break;
+  //case MCSymbolRefExpr::VK_Nios2_HIGHER:    OS << "%higher("; break;
+  //case MCSymbolRefExpr::VK_Nios2_HIGHEST:   OS << "%highest("; break;
+  //}
 
   OS << SRE->getSymbol();
 
@@ -138,11 +138,11 @@ static void printExpr(const MCExpr *Expr, raw_ostream &OS) {
     OS << Offset;
   }
 
-  if ((Kind == MCSymbolRefExpr::VK_Nios2_GPOFF_HI) ||
-      (Kind == MCSymbolRefExpr::VK_Nios2_GPOFF_LO))
-    OS << ")))";
-  else if (Kind != MCSymbolRefExpr::VK_None)
-    OS << ')';
+//  if ((Kind == MCSymbolRefExpr::VK_Nios2_GPOFF_HI) ||
+//      (Kind == MCSymbolRefExpr::VK_Nios2_GPOFF_LO))
+//    OS << ")))";
+//  else if (Kind != MCSymbolRefExpr::VK_None)
+//    OS << ')';
 }
 
 void Nios2InstPrinter::printOperand(const MCInst *MI, unsigned OpNo,

@@ -18,7 +18,7 @@
 #include "llvm/Support/TargetRegistry.h"
 
 namespace llvm {
-extern Target TheNios2Target;
+extern Target TheNios2StdTarget;
 }
 
 // Defines symbolic names for Nios2 registers.  This defines a mapping from

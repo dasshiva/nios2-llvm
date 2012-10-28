@@ -22,14 +22,17 @@
 
 namespace llvm {
 class Nios2Subtarget;
+class Nios2InstrInfo;
 class Type;
 
 class Nios2RegisterInfo : public Nios2GenRegisterInfo {
 protected:
   const Nios2Subtarget &Subtarget;
+  const Nios2InstrInfo &TII;
 
 public:
-  Nios2RegisterInfo(const Nios2Subtarget &Subtarget);
+  Nios2RegisterInfo(const Nios2Subtarget &Subtarget,
+      const Nios2InstrInfo &I);
 
   /// getRegisterNumbering - Given the enum value for some register, e.g.
   /// Nios2::RA, return the number that it corresponds to (e.g. 31).

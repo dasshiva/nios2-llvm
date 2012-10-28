@@ -28,7 +28,9 @@ using namespace llvm;
 
 Nios2InstrInfo::Nios2InstrInfo(Nios2TargetMachine &tm)
   : Nios2GenInstrInfo(Nios2::ADJCALLSTACKDOWN, Nios2::ADJCALLSTACKUP),
-    TM(tm), UncondBrOpc(Nios2::BR) {}
+    TM(tm),
+    RI(*tm.getSubtargetImpl(), *this),
+    UncondBrOpc(Nios2::BR) {}
 
 bool Nios2InstrInfo::isZeroImm(const MachineOperand &op) const {
   return op.isImm() && op.getImm() == 0;
@@ -249,7 +251,7 @@ RemoveBranch(MachineBasicBlock &MBB) const
 
 /// GetOppositeBranchOpc - Return the inverse of the specified
 /// opcode, e.g. turning BEQ to BNE.
-unsigned MipsSEInstrInfo::GetOppositeBranchOpc(unsigned Opc) const {
+unsigned Nios2InstrInfo::GetOppositeBranchOpc(unsigned Opc) const {
   switch (Opc) {
   default:           llvm_unreachable("Illegal opcode!");
   case Nios2::BEQ:    return Nios2::BNE;
@@ -311,5 +313,26 @@ Nios2InstrInfo::loadImmediate(int32_t Imm, MachineBasicBlock &MBB,
   BuildMI(MBB, II, DL, get(Nios2::ORi), ATReg).addReg(ZEROReg)
     .addImm(Imm & 0xffffU);
   return ATReg;
+}
+
+/// Adjust SP by Amount bytes.
+void Nios2InstrInfo::adjustStackPtr(unsigned SP, int64_t Amount,
+                                     MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator I) const {
+  DebugLoc DL = I != MBB.end() ? I->getDebugLoc() : DebugLoc();
+  unsigned ADDu = Nios2::ADD;
+  unsigned ADDiu = Nios2::ADDi;
+
+  if (isInt<16>(Amount))// addi sp, sp, amount
+    BuildMI(MBB, I, DL, get(ADDiu), SP).addReg(SP).addImm(Amount);
+  else { // Expand immediate that doesn't fit in 16-bit.
+    MBB.getParent()->getInfo<Nios2FunctionInfo>()->setEmitNOAT();
+    unsigned Reg = loadImmediate(Amount, MBB, I, DL, 0);
+    BuildMI(MBB, I, DL, get(ADDu), SP).addReg(SP).addReg(Reg);
+  }
+}
+
+const Nios2RegisterInfo &Nios2InstrInfo::getRegisterInfo() const {
+  return RI;
 }
 

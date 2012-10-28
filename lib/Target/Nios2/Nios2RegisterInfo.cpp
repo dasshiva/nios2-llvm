@@ -41,8 +41,9 @@
 
 using namespace llvm;
 
-Nios2RegisterInfo::Nios2RegisterInfo(const Nios2Subtarget &ST)
-  : Nios2GenRegisterInfo(Nios2::RA), Subtarget(ST) {}
+Nios2RegisterInfo::Nios2RegisterInfo(const Nios2Subtarget &ST,
+    const Nios2InstrInfo &I): Nios2GenRegisterInfo(Nios2::RA),
+  Subtarget(ST), TII(I) {}
 
 unsigned Nios2RegisterInfo::getPICCallReg() { return Nios2::GP; }
 
@@ -128,7 +129,7 @@ void Nios2RegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
   MachineInstr &MI = *II;
   MachineFunction &MF = *MI.getParent()->getParent();
   MachineFrameInfo *MFI = MF.getFrameInfo();
-  MipsFunctionInfo *Nios2FI = MF.getInfo<Nios2FunctionInfo>();
+  Nios2FunctionInfo *Nios2FI = MF.getInfo<Nios2FunctionInfo>();
 
   const std::vector<CalleeSavedInfo> &CSI = MFI->getCalleeSavedInfo();
   int MinCSFI = 0;
@@ -176,13 +177,13 @@ void Nios2RegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
   if (!MI.isDebugValue() && !isInt<16>(Offset)) {
     MachineBasicBlock &MBB = *MI.getParent();
     DebugLoc DL = II->getDebugLoc();
-    unsigned ADDu = Mips::ADD;
-    unsigned ATReg = Mips::AT;
+    unsigned ATReg = Nios2::AT;
     unsigned NewImm;
 
     Nios2FI->setEmitNOAT();
     unsigned Reg = TII.loadImmediate(Offset, MBB, II, DL, &NewImm);
-    BuildMI(MBB, II, DL, TII.get(ADD), ATReg).addReg(FrameReg).addReg(Reg);
+    BuildMI(MBB, II, DL, TII.get(Nios2::ADD), ATReg).addReg(FrameReg)
+      .addReg(Reg);
 
     FrameReg = ATReg;
     Offset = SignExtend64<16>(NewImm);
@@ -195,10 +196,7 @@ void Nios2RegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
 unsigned Nios2RegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
-  bool IsN64 = Subtarget.isABI_N64();
-
-  return TFI->hasFP(MF) ? (IsN64 ? Nios2::FP_64 : Nios2::FP) :
-                          (IsN64 ? Nios2::SP_64 : Nios2::SP);
+  return TFI->hasFP(MF) ? Nios2::FP : Nios2::SP;
 }
 
 unsigned Nios2RegisterInfo::

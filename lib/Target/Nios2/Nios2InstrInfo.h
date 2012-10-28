@@ -27,10 +27,16 @@ namespace llvm {
 class Nios2InstrInfo : public Nios2GenInstrInfo {
 protected:
   Nios2TargetMachine &TM;
+  const Nios2RegisterInfo RI;
   unsigned UncondBrOpc;
 
 public:
   explicit Nios2InstrInfo(Nios2TargetMachine &TM);
+
+  /// Adjust SP by Amount bytes.
+  void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
+                      MachineBasicBlock::iterator I) const;
+
 
   /// Branch Analysis
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
@@ -61,9 +67,9 @@ public:
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
   ///
-  virtual const Nios2RegisterInfo &getRegisterInfo() const = 0;
+  virtual const Nios2RegisterInfo &getRegisterInfo() const;
 
-  virtual unsigned GetOppositeBranchOpc(unsigned Opc) const = 0;
+  virtual unsigned GetOppositeBranchOpc(unsigned Opc) const;
 
   /// Return the number of bytes of code the specified instruction may be.
   unsigned GetInstSizeInBytes(const MachineInstr *MI) const;

@@ -12,9 +12,9 @@
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
-Target llvm::TheNios2Target;
+Target llvm::TheNios2StdTarget;
 
 extern "C" void LLVMInitializeNios2TargetInfo() {
   RegisterTarget<Triple::nios2,
-        /*HasJIT=*/false> X(TheNios2Target, "nios2", "Nios2");
+        /*HasJIT=*/false> X(TheNios2StdTarget, "nios2", "Nios2");
 }

@@ -30,6 +30,10 @@ public:
     : TargetFrameLowering(StackGrowsDown, 8, 0, 8), STI(sti) {}
 
   bool hasFP(const MachineFunction &MF) const;
+  /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
+  /// the function.
+  void emitPrologue(MachineFunction &MF) const;
+  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const;
 };
 
 } // End llvm namespace

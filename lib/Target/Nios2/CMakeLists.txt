@@ -14,16 +14,7 @@ tablegen(LLVM Nios2GenAsmMatcher.inc -gen-asm-matcher)
 add_public_tablegen_target(Nios2CommonTableGen)
 
 add_llvm_target(Nios2CodeGen
-  Nios216FrameLowering.cpp
-  Nios216InstrInfo.cpp
-  Nios216RegisterInfo.cpp
-  Nios2AnalyzeImmediate.cpp
   Nios2AsmPrinter.cpp
-  Nios2CodeEmitter.cpp
-  Nios2DelaySlotFiller.cpp
-  Nios2DirectObjLower.cpp
-  Nios2ELFWriterInfo.cpp
-  Nios2JITInfo.cpp
   Nios2InstrInfo.cpp
   Nios2ISelDAGToDAG.cpp
   Nios2ISelLowering.cpp
@@ -32,19 +23,16 @@ add_llvm_target(Nios2CodeGen
   Nios2MCInstLower.cpp
   Nios2MachineFunction.cpp
   Nios2RegisterInfo.cpp
-  Nios2SEFrameLowering.cpp
-  Nios2SEInstrInfo.cpp
-  Nios2SERegisterInfo.cpp
+  Nios2FrameLowering.cpp
+  Nios2InstrInfo.cpp
+  Nios2RegisterInfo.cpp
   Nios2Subtarget.cpp
   Nios2TargetMachine.cpp
-  Nios2TargetObjectFile.cpp
   Nios2SelectionDAGInfo.cpp
   )
 
 add_dependencies(LLVMNios2CodeGen intrinsics_gen)
 
 add_subdirectory(InstPrinter)
-add_subdirectory(Disassembler)
 add_subdirectory(TargetInfo)
 add_subdirectory(MCTargetDesc)
-add_subdirectory(AsmParser)

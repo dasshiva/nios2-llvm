@@ -22,7 +22,7 @@ using namespace llvm;
 
 extern "C" void LLVMInitializeNios2Target() {
   // Register the target.
-  RegisterTargetMachine<Nios2StdTargetMachine> X(TheNios2Target);
+  RegisterTargetMachine<Nios2StdTargetMachine> X(TheNios2StdTarget);
 }
 
 Nios2TargetMachine::

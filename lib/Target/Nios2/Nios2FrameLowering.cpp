@@ -28,6 +28,115 @@
 
 using namespace llvm;
 
+void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
+  MachineBasicBlock &MBB   = MF.front();
+  MachineFrameInfo *MFI    = MF.getFrameInfo();
+  const Nios2InstrInfo &TII =
+    *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
+  MachineBasicBlock::iterator MBBI = MBB.begin();
+  DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
+  unsigned SP = Nios2::SP;
+  unsigned FP = Nios2::FP;
+  unsigned ZERO = Nios2::ZERO;
+  unsigned ADDu = Nios2::ADD;
+
+  // First, compute final stack size.
+  uint64_t StackSize = MFI->getStackSize();
+
+  // No need to allocate space on the stack.
+  if (StackSize == 0 && !MFI->adjustsStack()) return;
+
+  MachineModuleInfo &MMI = MF.getMMI();
+  std::vector<MachineMove> &Moves = MMI.getFrameMoves();
+  MachineLocation DstML, SrcML;
+
+  // Adjust stack.
+  TII.adjustStackPtr(SP, -StackSize, MBB, MBBI);
+
+  // emit ".cfi_def_cfa_offset StackSize"
+  MCSymbol *AdjustSPLabel = MMI.getContext().CreateTempSymbol();
+  BuildMI(MBB, MBBI, dl,
+          TII.get(TargetOpcode::PROLOG_LABEL)).addSym(AdjustSPLabel);
+  DstML = MachineLocation(MachineLocation::VirtualFP);
+  SrcML = MachineLocation(MachineLocation::VirtualFP, -StackSize);
+  Moves.push_back(MachineMove(AdjustSPLabel, DstML, SrcML));
+
+  const std::vector<CalleeSavedInfo> &CSI = MFI->getCalleeSavedInfo();
+
+  if (CSI.size()) {
+    // Find the instruction past the last instruction that saves a callee-saved
+    // register to the stack.
+    for (unsigned i = 0; i < CSI.size(); ++i)
+      ++MBBI;
+
+    // Iterate over list of callee-saved registers and emit .cfi_offset
+    // directives.
+    MCSymbol *CSLabel = MMI.getContext().CreateTempSymbol();
+    BuildMI(MBB, MBBI, dl,
+            TII.get(TargetOpcode::PROLOG_LABEL)).addSym(CSLabel);
+
+    for (std::vector<CalleeSavedInfo>::const_iterator I = CSI.begin(),
+           E = CSI.end(); I != E; ++I) {
+      int64_t Offset = MFI->getObjectOffset(I->getFrameIdx());
+      unsigned Reg = I->getReg();
+
+      // Reg is in CPURegs
+      DstML = MachineLocation(MachineLocation::VirtualFP, Offset);
+      SrcML = MachineLocation(Reg);
+      Moves.push_back(MachineMove(CSLabel, DstML, SrcML));
+    }
+  }
+
+  // if framepointer enabled, set it to point to the stack pointer.
+  if (hasFP(MF)) {
+    // Insert instruction "move $fp, $sp" at this location.
+    BuildMI(MBB, MBBI, dl, TII.get(ADDu), FP).addReg(SP).addReg(ZERO);
+
+    // emit ".cfi_def_cfa_register $fp"
+    MCSymbol *SetFPLabel = MMI.getContext().CreateTempSymbol();
+    BuildMI(MBB, MBBI, dl,
+            TII.get(TargetOpcode::PROLOG_LABEL)).addSym(SetFPLabel);
+    DstML = MachineLocation(FP);
+    SrcML = MachineLocation(MachineLocation::VirtualFP);
+    Moves.push_back(MachineMove(SetFPLabel, DstML, SrcML));
+  }
+}
+
+void Nios2FrameLowering::emitEpilogue(MachineFunction &MF,
+                                       MachineBasicBlock &MBB) const {
+  MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
+  MachineFrameInfo *MFI            = MF.getFrameInfo();
+  const Nios2InstrInfo &TII =
+    *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
+  DebugLoc dl = MBBI->getDebugLoc();
+  unsigned SP = Nios2::SP;
+  unsigned FP = Nios2::FP;
+  unsigned ZERO = Nios2::ZERO;
+  unsigned ADDu = Nios2::ADD;
+
+  // if framepointer enabled, restore the stack pointer.
+  if (hasFP(MF)) {
+    // Find the first instruction that restores a callee-saved register.
+    MachineBasicBlock::iterator I = MBBI;
+
+    for (unsigned i = 0; i < MFI->getCalleeSavedInfo().size(); ++i)
+      --I;
+
+    // Insert instruction "move $sp, $fp" at this location.
+    BuildMI(MBB, I, dl, TII.get(ADDu), SP).addReg(FP).addReg(ZERO);
+  }
+
+  // Get the number of bytes from FrameInfo
+  uint64_t StackSize = MFI->getStackSize();
+
+  if (!StackSize)
+    return;
+
+  // Adjust stack.
+  TII.adjustStackPtr(SP, StackSize, MBB, MBBI);
+}
+
+
 
 //===----------------------------------------------------------------------===//
 //

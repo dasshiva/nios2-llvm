@@ -386,5 +386,5 @@ void Nios2AsmPrinter::PrintDebugValueComment(const MachineInstr *MI,
 
 // Force static initialization.
 extern "C" void LLVMInitializeNios2AsmPrinter() {
-  RegisterAsmPrinter<Nios2AsmPrinter> X(TheNios2Target);
+  RegisterAsmPrinter<Nios2AsmPrinter> X(TheNios2StdTarget);
 }

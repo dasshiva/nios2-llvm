@@ -19,7 +19,7 @@ BUILT_SOURCES = Nios2GenRegisterInfo.inc Nios2GenInstrInfo.inc \
                 Nios2GenEDInfo.inc Nios2GenDisassemblerTables.inc \
                 Nios2GenAsmMatcher.inc
 
-DIRS = InstPrinter Disassembler AsmParser TargetInfo MCTargetDesc
+DIRS = InstPrinter TargetInfo MCTargetDesc
 
 include $(LEVEL)/Makefile.common
 
