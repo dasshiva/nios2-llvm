@@ -44,7 +44,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/DataLayout.h"
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetIntrinsicInfo.h"
@@ -89,7 +89,7 @@ static const unsigned MaxParallelChains = 64;
 
 static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
                                       const SDValue *Parts, unsigned NumParts,
-                                      EVT PartVT, EVT ValueVT);
+                                      EVT PartVT, EVT ValueVT, const Value *V);
 
 /// getCopyFromParts - Create a value that contains the specified legal parts
 /// combined into the value they represent.  If the parts combine to a type
@@ -99,9 +99,11 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
 static SDValue getCopyFromParts(SelectionDAG &DAG, DebugLoc DL,
                                 const SDValue *Parts,
                                 unsigned NumParts, EVT PartVT, EVT ValueVT,
+                                const Value *V,
                                 ISD::NodeType AssertOp = ISD::DELETED_NODE) {
   if (ValueVT.isVector())
-    return getCopyFromPartsVector(DAG, DL, Parts, NumParts, PartVT, ValueVT);
+    return getCopyFromPartsVector(DAG, DL, Parts, NumParts,
+                                  PartVT, ValueVT, V);
 
   assert(NumParts > 0 && "No parts to assemble!");
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
@@ -125,9 +127,9 @@ static SDValue getCopyFromParts(SelectionDAG &DAG, DebugLoc DL,
 
       if (RoundParts > 2) {
         Lo = getCopyFromParts(DAG, DL, Parts, RoundParts / 2,
-                              PartVT, HalfVT);
+                              PartVT, HalfVT, V);
         Hi = getCopyFromParts(DAG, DL, Parts + RoundParts / 2,
-                              RoundParts / 2, PartVT, HalfVT);
+                              RoundParts / 2, PartVT, HalfVT, V);
       } else {
         Lo = DAG.getNode(ISD::BITCAST, DL, HalfVT, Parts[0]);
         Hi = DAG.getNode(ISD::BITCAST, DL, HalfVT, Parts[1]);
@@ -143,7 +145,7 @@ static SDValue getCopyFromParts(SelectionDAG &DAG, DebugLoc DL,
         unsigned OddParts = NumParts - RoundParts;
         EVT OddVT = EVT::getIntegerVT(*DAG.getContext(), OddParts * PartBits);
         Hi = getCopyFromParts(DAG, DL,
-                              Parts + RoundParts, OddParts, PartVT, OddVT);
+                              Parts + RoundParts, OddParts, PartVT, OddVT, V);
 
         // Combine the round and odd parts.
         Lo = Val;
@@ -172,7 +174,7 @@ static SDValue getCopyFromParts(SelectionDAG &DAG, DebugLoc DL,
       assert(ValueVT.isFloatingPoint() && PartVT.isInteger() &&
              !PartVT.isVector() && "Unexpected split");
       EVT IntVT = EVT::getIntegerVT(*DAG.getContext(), ValueVT.getSizeInBits());
-      Val = getCopyFromParts(DAG, DL, Parts, NumParts, PartVT, IntVT);
+      Val = getCopyFromParts(DAG, DL, Parts, NumParts, PartVT, IntVT, V);
     }
   }
 
@@ -210,14 +212,14 @@ static SDValue getCopyFromParts(SelectionDAG &DAG, DebugLoc DL,
   llvm_unreachable("Unknown mismatch!");
 }
 
-/// getCopyFromParts - Create a value that contains the specified legal parts
-/// combined into the value they represent.  If the parts combine to a type
-/// larger then ValueVT then AssertOp can be used to specify whether the extra
-/// bits are known to be zero (ISD::AssertZext) or sign extended from ValueVT
-/// (ISD::AssertSext).
+/// getCopyFromPartsVector - Create a value that contains the specified legal
+/// parts combined into the value they represent.  If the parts combine to a
+/// type larger then ValueVT then AssertOp can be used to specify whether the
+/// extra bits are known to be zero (ISD::AssertZext) or sign extended from
+/// ValueVT (ISD::AssertSext).
 static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
                                       const SDValue *Parts, unsigned NumParts,
-                                      EVT PartVT, EVT ValueVT) {
+                                      EVT PartVT, EVT ValueVT, const Value *V) {
   assert(ValueVT.isVector() && "Not a vector value");
   assert(NumParts > 0 && "No parts to assemble!");
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
@@ -243,7 +245,7 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
       // as appropriate.
       for (unsigned i = 0; i != NumParts; ++i)
         Ops[i] = getCopyFromParts(DAG, DL, &Parts[i], 1,
-                                  PartVT, IntermediateVT);
+                                  PartVT, IntermediateVT, V);
     } else if (NumParts > 0) {
       // If the intermediate type was expanded, build the intermediate
       // operands from the parts.
@@ -252,7 +254,7 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
       unsigned Factor = NumParts / NumIntermediates;
       for (unsigned i = 0; i != NumIntermediates; ++i)
         Ops[i] = getCopyFromParts(DAG, DL, &Parts[i * Factor], Factor,
-                                  PartVT, IntermediateVT);
+                                  PartVT, IntermediateVT, V);
     }
 
     // Build a vector with BUILD_VECTOR or CONCAT_VECTORS from the
@@ -300,8 +302,19 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
     return DAG.getNode(ISD::BITCAST, DL, ValueVT, Val);
 
   // Handle cases such as i8 -> <1 x i1>
-  assert(ValueVT.getVectorNumElements() == 1 &&
-         "Only trivial scalar-to-vector conversions should get here!");
+  if (ValueVT.getVectorNumElements() != 1) {
+    LLVMContext &Ctx = *DAG.getContext();
+    Twine ErrMsg("non-trivial scalar-to-vector conversion");
+    if (const Instruction *I = dyn_cast_or_null<Instruction>(V)) {
+      if (const CallInst *CI = dyn_cast<CallInst>(I))
+        if (isa<InlineAsm>(CI->getCalledValue()))
+          ErrMsg = ErrMsg + ", possible invalid constraint for vector type";
+      Ctx.emitError(I, ErrMsg);
+    } else {
+      Ctx.emitError(ErrMsg);
+    }
+    report_fatal_error("Cannot handle scalar-to-vector conversion!");
+  }
 
   if (ValueVT.getVectorNumElements() == 1 &&
       ValueVT.getVectorElementType() != PartVT) {
@@ -313,25 +326,22 @@ static SDValue getCopyFromPartsVector(SelectionDAG &DAG, DebugLoc DL,
   return DAG.getNode(ISD::BUILD_VECTOR, DL, ValueVT, Val);
 }
 
-
-
-
 static void getCopyToPartsVector(SelectionDAG &DAG, DebugLoc dl,
                                  SDValue Val, SDValue *Parts, unsigned NumParts,
-                                 EVT PartVT);
+                                 EVT PartVT, const Value *V);
 
 /// getCopyToParts - Create a series of nodes that contain the specified value
 /// split into legal parts.  If the parts contain more bits than Val, then, for
 /// integers, ExtendKind can be used to specify how to generate the extra bits.
 static void getCopyToParts(SelectionDAG &DAG, DebugLoc DL,
                            SDValue Val, SDValue *Parts, unsigned NumParts,
-                           EVT PartVT,
+                           EVT PartVT, const Value *V,
                            ISD::NodeType ExtendKind = ISD::ANY_EXTEND) {
   EVT ValueVT = Val.getValueType();
 
   // Handle the vector case separately.
   if (ValueVT.isVector())
-    return getCopyToPartsVector(DAG, DL, Val, Parts, NumParts, PartVT);
+    return getCopyToPartsVector(DAG, DL, Val, Parts, NumParts, PartVT, V);
 
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   unsigned PartBits = PartVT.getSizeInBits();
@@ -383,7 +393,19 @@ static void getCopyToParts(SelectionDAG &DAG, DebugLoc DL,
          "Failed to tile the value with PartVT!");
 
   if (NumParts == 1) {
-    assert(PartVT == ValueVT && "Type conversion failed!");
+    if (PartVT != ValueVT) {
+      LLVMContext &Ctx = *DAG.getContext();
+      Twine ErrMsg("scalar-to-vector conversion failed");
+      if (const Instruction *I = dyn_cast_or_null<Instruction>(V)) {
+        if (const CallInst *CI = dyn_cast<CallInst>(I))
+          if (isa<InlineAsm>(CI->getCalledValue()))
+            ErrMsg = ErrMsg + ", possible invalid constraint for vector type";
+        Ctx.emitError(I, ErrMsg);
+      } else {
+        Ctx.emitError(ErrMsg);
+      }
+    }
+
     Parts[0] = Val;
     return;
   }
@@ -398,7 +420,7 @@ static void getCopyToParts(SelectionDAG &DAG, DebugLoc DL,
     unsigned OddParts = NumParts - RoundParts;
     SDValue OddVal = DAG.getNode(ISD::SRL, DL, ValueVT, Val,
                                  DAG.getIntPtrConstant(RoundBits));
-    getCopyToParts(DAG, DL, OddVal, Parts + RoundParts, OddParts, PartVT);
+    getCopyToParts(DAG, DL, OddVal, Parts + RoundParts, OddParts, PartVT, V);
 
     if (TLI.isBigEndian())
       // The odd parts were reversed by getCopyToParts - unreverse them.
@@ -444,7 +466,7 @@ static void getCopyToParts(SelectionDAG &DAG, DebugLoc DL,
 /// value split into legal parts.
 static void getCopyToPartsVector(SelectionDAG &DAG, DebugLoc DL,
                                  SDValue Val, SDValue *Parts, unsigned NumParts,
-                                 EVT PartVT) {
+                                 EVT PartVT, const Value *V) {
   EVT ValueVT = Val.getValueType();
   assert(ValueVT.isVector() && "Not a vector");
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
@@ -530,7 +552,7 @@ static void getCopyToPartsVector(SelectionDAG &DAG, DebugLoc DL,
     // If the register was not expanded, promote or copy the value,
     // as appropriate.
     for (unsigned i = 0; i != NumParts; ++i)
-      getCopyToParts(DAG, DL, Ops[i], &Parts[i], 1, PartVT);
+      getCopyToParts(DAG, DL, Ops[i], &Parts[i], 1, PartVT, V);
   } else if (NumParts > 0) {
     // If the intermediate type was expanded, split each the value into
     // legal parts.
@@ -538,12 +560,9 @@ static void getCopyToPartsVector(SelectionDAG &DAG, DebugLoc DL,
            "Must expand into a divisible number of parts!");
     unsigned Factor = NumParts / NumIntermediates;
     for (unsigned i = 0; i != NumIntermediates; ++i)
-      getCopyToParts(DAG, DL, Ops[i], &Parts[i*Factor], Factor, PartVT);
+      getCopyToParts(DAG, DL, Ops[i], &Parts[i*Factor], Factor, PartVT, V);
   }
 }
-
-
-
 
 namespace {
   /// RegsForValue - This struct represents the registers (physical or virtual)
@@ -622,14 +641,15 @@ namespace {
     /// If the Flag pointer is NULL, no flag is used.
     SDValue getCopyFromRegs(SelectionDAG &DAG, FunctionLoweringInfo &FuncInfo,
                             DebugLoc dl,
-                            SDValue &Chain, SDValue *Flag) const;
+                            SDValue &Chain, SDValue *Flag,
+                            const Value *V = 0) const;
 
     /// getCopyToRegs - Emit a series of CopyToReg nodes that copies the
     /// specified value into the registers specified by this object.  This uses
     /// Chain/Flag as the input and updates them for the output Chain/Flag.
     /// If the Flag pointer is NULL, no flag is used.
     void getCopyToRegs(SDValue Val, SelectionDAG &DAG, DebugLoc dl,
-                       SDValue &Chain, SDValue *Flag) const;
+                       SDValue &Chain, SDValue *Flag, const Value *V) const;
 
     /// AddInlineAsmOperands - Add this value to the specified inlineasm node
     /// operand list.  This adds the code marker, matching input operand index
@@ -648,7 +668,8 @@ namespace {
 SDValue RegsForValue::getCopyFromRegs(SelectionDAG &DAG,
                                       FunctionLoweringInfo &FuncInfo,
                                       DebugLoc dl,
-                                      SDValue &Chain, SDValue *Flag) const {
+                                      SDValue &Chain, SDValue *Flag,
+                                      const Value *V) const {
   // A Value with type {} or [0 x %t] needs no registers.
   if (ValueVTs.empty())
     return SDValue();
@@ -722,7 +743,7 @@ SDValue RegsForValue::getCopyFromRegs(SelectionDAG &DAG,
     }
 
     Values[Value] = getCopyFromParts(DAG, dl, Parts.begin(),
-                                     NumRegs, RegisterVT, ValueVT);
+                                     NumRegs, RegisterVT, ValueVT, V);
     Part += NumRegs;
     Parts.clear();
   }
@@ -737,7 +758,8 @@ SDValue RegsForValue::getCopyFromRegs(SelectionDAG &DAG,
 /// Chain/Flag as the input and updates them for the output Chain/Flag.
 /// If the Flag pointer is NULL, no flag is used.
 void RegsForValue::getCopyToRegs(SDValue Val, SelectionDAG &DAG, DebugLoc dl,
-                                 SDValue &Chain, SDValue *Flag) const {
+                                 SDValue &Chain, SDValue *Flag,
+                                 const Value *V) const {
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
 
   // Get the list of the values's legal parts.
@@ -749,7 +771,7 @@ void RegsForValue::getCopyToRegs(SDValue Val, SelectionDAG &DAG, DebugLoc dl,
     EVT RegisterVT = RegVTs[Value];
 
     getCopyToParts(DAG, dl, Val.getValue(Val.getResNo() + Value),
-                   &Parts[Part], NumParts, RegisterVT);
+                   &Parts[Part], NumParts, RegisterVT, V);
     Part += NumParts;
   }
 
@@ -825,7 +847,7 @@ void SelectionDAGBuilder::init(GCFunctionInfo *gfi, AliasAnalysis &aa,
   AA = &aa;
   GFI = gfi;
   LibInfo = li;
-  TD = DAG.getTarget().getTargetData();
+  TD = DAG.getTarget().getDataLayout();
   Context = DAG.getContext();
   LPadToCallSiteMap.clear();
 }
@@ -994,7 +1016,7 @@ SDValue SelectionDAGBuilder::getValue(const Value *V) {
     unsigned InReg = It->second;
     RegsForValue RFV(*DAG.getContext(), TLI, InReg, V->getType());
     SDValue Chain = DAG.getEntryNode();
-    N = RFV.getCopyFromRegs(DAG, FuncInfo, getCurDebugLoc(), Chain, NULL);
+    N = RFV.getCopyFromRegs(DAG, FuncInfo, getCurDebugLoc(), Chain, NULL, V);
     resolveDanglingDebugInfo(V, N);
     return N;
   }
@@ -1149,7 +1171,7 @@ SDValue SelectionDAGBuilder::getValueImpl(const Value *V) {
     unsigned InReg = FuncInfo.InitializeRegForValue(Inst);
     RegsForValue RFV(*DAG.getContext(), TLI, InReg, Inst->getType());
     SDValue Chain = DAG.getEntryNode();
-    return RFV.getCopyFromRegs(DAG, FuncInfo, getCurDebugLoc(), Chain, NULL);
+    return RFV.getCopyFromRegs(DAG, FuncInfo, getCurDebugLoc(), Chain, NULL, V);
   }
 
   llvm_unreachable("Can't get register for value!");
@@ -1205,9 +1227,9 @@ void SelectionDAGBuilder::visitRet(const ReturnInst &I) {
         ISD::NodeType ExtendKind = ISD::ANY_EXTEND;
 
         const Function *F = I.getParent()->getParent();
-        if (F->paramHasAttr(0, Attribute::SExt))
+        if (F->getRetAttributes().hasAttribute(Attributes::SExt))
           ExtendKind = ISD::SIGN_EXTEND;
-        else if (F->paramHasAttr(0, Attribute::ZExt))
+        else if (F->getRetAttributes().hasAttribute(Attributes::ZExt))
           ExtendKind = ISD::ZERO_EXTEND;
 
         if (ExtendKind != ISD::ANY_EXTEND && VT.isInteger())
@@ -1218,11 +1240,11 @@ void SelectionDAGBuilder::visitRet(const ReturnInst &I) {
         SmallVector<SDValue, 4> Parts(NumParts);
         getCopyToParts(DAG, getCurDebugLoc(),
                        SDValue(RetOp.getNode(), RetOp.getResNo() + j),
-                       &Parts[0], NumParts, PartVT, ExtendKind);
+                       &Parts[0], NumParts, PartVT, &I, ExtendKind);
 
         // 'inreg' on function refers to return value
         ISD::ArgFlagsTy Flags = ISD::ArgFlagsTy();
-        if (F->paramHasAttr(0, Attribute::InReg))
+        if (F->getRetAttributes().hasAttribute(Attributes::InReg))
           Flags.setInReg();
 
         // Propagate extension type if any
@@ -1233,7 +1255,7 @@ void SelectionDAGBuilder::visitRet(const ReturnInst &I) {
 
         for (unsigned i = 0; i < NumParts; ++i) {
           Outs.push_back(ISD::OutputArg(Flags, Parts[i].getValueType(),
-                                        /*isfixed=*/true));
+                                        /*isfixed=*/true, 0, 0));
           OutVals.push_back(Parts[i]);
         }
       }
@@ -2093,7 +2115,7 @@ bool SelectionDAGBuilder::handleJTSwitchCase(CaseRec &CR,
   for (CaseItr I = CR.Range.first, E = CR.Range.second; I != E; ++I)
     TSize += I->size();
 
-  if (!areJTsAllowed(TLI) || TSize.ult(4))
+  if (!areJTsAllowed(TLI) || TSize.ult(TLI.getMinimumJumpTableEntries()))
     return false;
 
   APInt Range = ComputeRange(First, Last);
@@ -2565,9 +2587,10 @@ void SelectionDAGBuilder::visitSwitch(const SwitchInst &SI) {
     if (handleSmallSwitchRange(CR, WorkList, SV, Default, SwitchMBB))
       continue;
 
-    // If the switch has more than 5 blocks, and at least 40% dense, and the
+    // If the switch has more than N blocks, and is at least 40% dense, and the
     // target supports indirect branches, then emit a jump table rather than
     // lowering the switch to a binary tree of conditional branches.
+    // N defaults to 4 and is controlled via TLS.getMinimumJumpTableEntries().
     if (handleJTSwitchCase(CR, WorkList, SV, Default, SwitchMBB))
       continue;
 
@@ -2581,14 +2604,14 @@ void SelectionDAGBuilder::visitIndirectBr(const IndirectBrInst &I) {
   MachineBasicBlock *IndirectBrMBB = FuncInfo.MBB;
 
   // Update machine-CFG edges with unique successors.
-  SmallVector<BasicBlock*, 32> succs;
-  succs.reserve(I.getNumSuccessors());
-  for (unsigned i = 0, e = I.getNumSuccessors(); i != e; ++i)
-    succs.push_back(I.getSuccessor(i));
-  array_pod_sort(succs.begin(), succs.end());
-  succs.erase(std::unique(succs.begin(), succs.end()), succs.end());
-  for (unsigned i = 0, e = succs.size(); i != e; ++i) {
-    MachineBasicBlock *Succ = FuncInfo.MBBMap[succs[i]];
+  SmallSet<BasicBlock*, 32> Done;
+  for (unsigned i = 0, e = I.getNumSuccessors(); i != e; ++i) {
+    BasicBlock *BB = I.getSuccessor(i);
+    bool Inserted = Done.insert(BB);
+    if (!Inserted)
+        continue;
+
+    MachineBasicBlock *Succ = FuncInfo.MBBMap[BB];
     addSuccessorWithWeight(IndirectBrMBB, Succ);
   }
 
@@ -3114,12 +3137,12 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
        OI != E; ++OI) {
     const Value *Idx = *OI;
     if (StructType *StTy = dyn_cast<StructType>(Ty)) {
-      unsigned Field = cast<ConstantInt>(Idx)->getZExtValue();
+      unsigned Field = cast<Constant>(Idx)->getUniqueInteger().getZExtValue();
       if (Field) {
         // N = N + Offset
         uint64_t Offset = TD->getStructLayout(StTy)->getElementOffset(Field);
         N = DAG.getNode(ISD::ADD, getCurDebugLoc(), N.getValueType(), N,
-                        DAG.getIntPtrConstant(Offset));
+                        DAG.getConstant(Offset, N.getValueType()));
       }
 
       Ty = StTy->getElementType(Field);
@@ -3164,7 +3187,7 @@ void SelectionDAGBuilder::visitGetElementPtr(const User &I) {
                              N.getValueType(), IdxN,
                              DAG.getConstant(Amt, IdxN.getValueType()));
         } else {
-          SDValue Scale = DAG.getConstant(ElementSize, TLI.getPointerTy());
+          SDValue Scale = DAG.getConstant(ElementSize, IdxN.getValueType());
           IdxN = DAG.getNode(ISD::MUL, getCurDebugLoc(),
                              N.getValueType(), IdxN, Scale);
         }
@@ -3185,9 +3208,9 @@ void SelectionDAGBuilder::visitAlloca(const AllocaInst &I) {
     return;   // getValue will auto-populate this.
 
   Type *Ty = I.getAllocatedType();
-  uint64_t TySize = TLI.getTargetData()->getTypeAllocSize(Ty);
+  uint64_t TySize = TLI.getDataLayout()->getTypeAllocSize(Ty);
   unsigned Align =
-    std::max((unsigned)TLI.getTargetData()->getPrefTypeAlignment(Ty),
+    std::max((unsigned)TLI.getDataLayout()->getPrefTypeAlignment(Ty),
              I.getAlignment());
 
   SDValue AllocSize = getValue(I.getArraySize());
@@ -3664,16 +3687,12 @@ getF32Constant(SelectionDAG &DAG, unsigned Flt) {
   return DAG.getConstantFP(APFloat(APInt(32, Flt)), MVT::f32);
 }
 
-/// visitExp - Lower an exp intrinsic. Handles the special sequences for
+/// expandExp - Lower an exp intrinsic. Handles the special sequences for
 /// limited-precision mode.
-void
-SelectionDAGBuilder::visitExp(const CallInst &I) {
-  SDValue result;
-  DebugLoc dl = getCurDebugLoc();
-
-  if (getValue(I.getArgOperand(0)).getValueType() == MVT::f32 &&
+static SDValue expandExp(DebugLoc dl, SDValue Op, SelectionDAG &DAG,
+                         const TargetLowering &TLI) {
+  if (Op.getValueType() == MVT::f32 &&
       LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    SDValue Op = getValue(I.getArgOperand(0));
 
     // Put the exponent in the right bit position for later addition to the
     // final result:
@@ -3692,6 +3711,7 @@ SelectionDAGBuilder::visitExp(const CallInst &I) {
     IntegerPartOfX = DAG.getNode(ISD::SHL, dl, MVT::i32, IntegerPartOfX,
                                  DAG.getConstant(23, TLI.getPointerTy()));
 
+    SDValue TwoToFracPartOfX;
     if (LimitFloatPrecision <= 6) {
       // For floating-point precision of 6:
       //
@@ -3705,16 +3725,9 @@ SelectionDAGBuilder::visitExp(const CallInst &I) {
       SDValue t3 = DAG.getNode(ISD::FADD, dl, MVT::f32, t2,
                                getF32Constant(DAG, 0x3f3c50c8));
       SDValue t4 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t3, X);
-      SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
-                               getF32Constant(DAG, 0x3f7f5e7e));
-      SDValue TwoToFracPartOfX = DAG.getNode(ISD::BITCAST, dl,MVT::i32, t5);
-
-      // Add the exponent into the result in integer domain.
-      SDValue t6 = DAG.getNode(ISD::ADD, dl, MVT::i32,
-                               TwoToFracPartOfX, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl, MVT::f32, t6);
-    } else if (LimitFloatPrecision > 6 && LimitFloatPrecision <= 12) {
+      TwoToFracPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
+                                     getF32Constant(DAG, 0x3f7f5e7e));
+    } else if (LimitFloatPrecision <= 12) {
       // For floating-point precision of 12:
       //
       //   TwoToFractionalPartOfX =
@@ -3731,16 +3744,9 @@ SelectionDAGBuilder::visitExp(const CallInst &I) {
       SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
                                getF32Constant(DAG, 0x3f324b07));
       SDValue t6 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t5, X);
-      SDValue t7 = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
-                               getF32Constant(DAG, 0x3f7ff8fd));
-      SDValue TwoToFracPartOfX = DAG.getNode(ISD::BITCAST, dl,MVT::i32, t7);
-
-      // Add the exponent into the result in integer domain.
-      SDValue t8 = DAG.getNode(ISD::ADD, dl, MVT::i32,
-                               TwoToFracPartOfX, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl, MVT::f32, t8);
-    } else { // LimitFloatPrecision > 12 && LimitFloatPrecision <= 18
+      TwoToFracPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
+                                     getF32Constant(DAG, 0x3f7ff8fd));
+    } else { // LimitFloatPrecision <= 18
       // For floating-point precision of 18:
       //
       //   TwoToFractionalPartOfX =
@@ -3769,37 +3775,27 @@ SelectionDAGBuilder::visitExp(const CallInst &I) {
       SDValue t11 = DAG.getNode(ISD::FADD, dl, MVT::f32, t10,
                                 getF32Constant(DAG, 0x3f317234));
       SDValue t12 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t11, X);
-      SDValue t13 = DAG.getNode(ISD::FADD, dl, MVT::f32, t12,
-                                getF32Constant(DAG, 0x3f800000));
-      SDValue TwoToFracPartOfX = DAG.getNode(ISD::BITCAST, dl,
-                                             MVT::i32, t13);
-
-      // Add the exponent into the result in integer domain.
-      SDValue t14 = DAG.getNode(ISD::ADD, dl, MVT::i32,
-                                TwoToFracPartOfX, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl, MVT::f32, t14);
+      TwoToFracPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t12,
+                                     getF32Constant(DAG, 0x3f800000));
     }
-  } else {
-    // No special expansion.
-    result = DAG.getNode(ISD::FEXP, dl,
-                         getValue(I.getArgOperand(0)).getValueType(),
-                         getValue(I.getArgOperand(0)));
+
+    // Add the exponent into the result in integer domain.
+    SDValue t13 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, TwoToFracPartOfX);
+    return DAG.getNode(ISD::BITCAST, dl, MVT::f32,
+                       DAG.getNode(ISD::ADD, dl, MVT::i32,
+                                   t13, IntegerPartOfX));
   }
 
-  setValue(&I, result);
+  // No special expansion.
+  return DAG.getNode(ISD::FEXP, dl, Op.getValueType(), Op);
 }
 
-/// visitLog - Lower a log intrinsic. Handles the special sequences for
+/// expandLog - Lower a log intrinsic. Handles the special sequences for
 /// limited-precision mode.
-void
-SelectionDAGBuilder::visitLog(const CallInst &I) {
-  SDValue result;
-  DebugLoc dl = getCurDebugLoc();
-
-  if (getValue(I.getArgOperand(0)).getValueType() == MVT::f32 &&
+static SDValue expandLog(DebugLoc dl, SDValue Op, SelectionDAG &DAG,
+                         const TargetLowering &TLI) {
+  if (Op.getValueType() == MVT::f32 &&
       LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    SDValue Op = getValue(I.getArgOperand(0));
     SDValue Op1 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, Op);
 
     // Scale the exponent by log(2) [0.69314718f].
@@ -3811,6 +3807,7 @@ SelectionDAGBuilder::visitLog(const CallInst &I) {
     // exponent of 1.
     SDValue X = GetSignificand(DAG, Op1, dl);
 
+    SDValue LogOfMantissa;
     if (LimitFloatPrecision <= 6) {
       // For floating-point precision of 6:
       //
@@ -3824,12 +3821,9 @@ SelectionDAGBuilder::visitLog(const CallInst &I) {
       SDValue t1 = DAG.getNode(ISD::FADD, dl, MVT::f32, t0,
                                getF32Constant(DAG, 0x3fb3a2b1));
       SDValue t2 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t1, X);
-      SDValue LogOfMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t2,
-                                          getF32Constant(DAG, 0x3f949a29));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, LogOfMantissa);
-    } else if (LimitFloatPrecision > 6 && LimitFloatPrecision <= 12) {
+      LogOfMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t2,
+                                  getF32Constant(DAG, 0x3f949a29));
+    } else if (LimitFloatPrecision <= 12) {
       // For floating-point precision of 12:
       //
       //   LogOfMantissa =
@@ -3850,12 +3844,9 @@ SelectionDAGBuilder::visitLog(const CallInst &I) {
       SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
                                getF32Constant(DAG, 0x40348e95));
       SDValue t6 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t5, X);
-      SDValue LogOfMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t6,
-                                          getF32Constant(DAG, 0x3fdef31a));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, LogOfMantissa);
-    } else { // LimitFloatPrecision > 12 && LimitFloatPrecision <= 18
+      LogOfMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t6,
+                                  getF32Constant(DAG, 0x3fdef31a));
+    } else { // LimitFloatPrecision <= 18
       // For floating-point precision of 18:
       //
       //   LogOfMantissa =
@@ -3884,32 +3875,23 @@ SelectionDAGBuilder::visitLog(const CallInst &I) {
       SDValue t9 = DAG.getNode(ISD::FADD, dl, MVT::f32, t8,
                                getF32Constant(DAG, 0x408797cb));
       SDValue t10 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t9, X);
-      SDValue LogOfMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t10,
-                                          getF32Constant(DAG, 0x4006dcab));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, LogOfMantissa);
+      LogOfMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t10,
+                                  getF32Constant(DAG, 0x4006dcab));
     }
-  } else {
-    // No special expansion.
-    result = DAG.getNode(ISD::FLOG, dl,
-                         getValue(I.getArgOperand(0)).getValueType(),
-                         getValue(I.getArgOperand(0)));
+
+    return DAG.getNode(ISD::FADD, dl, MVT::f32, LogOfExponent, LogOfMantissa);
   }
 
-  setValue(&I, result);
+  // No special expansion.
+  return DAG.getNode(ISD::FLOG, dl, Op.getValueType(), Op);
 }
 
-/// visitLog2 - Lower a log2 intrinsic. Handles the special sequences for
+/// expandLog2 - Lower a log2 intrinsic. Handles the special sequences for
 /// limited-precision mode.
-void
-SelectionDAGBuilder::visitLog2(const CallInst &I) {
-  SDValue result;
-  DebugLoc dl = getCurDebugLoc();
-
-  if (getValue(I.getArgOperand(0)).getValueType() == MVT::f32 &&
+static SDValue expandLog2(DebugLoc dl, SDValue Op, SelectionDAG &DAG,
+                          const TargetLowering &TLI) {
+  if (Op.getValueType() == MVT::f32 &&
       LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    SDValue Op = getValue(I.getArgOperand(0));
     SDValue Op1 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, Op);
 
     // Get the exponent.
@@ -3921,6 +3903,7 @@ SelectionDAGBuilder::visitLog2(const CallInst &I) {
 
     // Different possible minimax approximations of significand in
     // floating-point for various degrees of accuracy over [1,2].
+    SDValue Log2ofMantissa;
     if (LimitFloatPrecision <= 6) {
       // For floating-point precision of 6:
       //
@@ -3932,12 +3915,9 @@ SelectionDAGBuilder::visitLog2(const CallInst &I) {
       SDValue t1 = DAG.getNode(ISD::FADD, dl, MVT::f32, t0,
                                getF32Constant(DAG, 0x40019463));
       SDValue t2 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t1, X);
-      SDValue Log2ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t2,
-                                           getF32Constant(DAG, 0x3fd6633d));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, Log2ofMantissa);
-    } else if (LimitFloatPrecision > 6 && LimitFloatPrecision <= 12) {
+      Log2ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t2,
+                                   getF32Constant(DAG, 0x3fd6633d));
+    } else if (LimitFloatPrecision <= 12) {
       // For floating-point precision of 12:
       //
       //   Log2ofMantissa =
@@ -3958,12 +3938,9 @@ SelectionDAGBuilder::visitLog2(const CallInst &I) {
       SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
                                getF32Constant(DAG, 0x40823e2f));
       SDValue t6 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t5, X);
-      SDValue Log2ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t6,
-                                           getF32Constant(DAG, 0x4020d29c));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, Log2ofMantissa);
-    } else { // LimitFloatPrecision > 12 && LimitFloatPrecision <= 18
+      Log2ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t6,
+                                   getF32Constant(DAG, 0x4020d29c));
+    } else { // LimitFloatPrecision <= 18
       // For floating-point precision of 18:
       //
       //   Log2ofMantissa =
@@ -3993,32 +3970,23 @@ SelectionDAGBuilder::visitLog2(const CallInst &I) {
       SDValue t9 = DAG.getNode(ISD::FADD, dl, MVT::f32, t8,
                                getF32Constant(DAG, 0x40c39dad));
       SDValue t10 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t9, X);
-      SDValue Log2ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t10,
-                                           getF32Constant(DAG, 0x4042902c));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, Log2ofMantissa);
+      Log2ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t10,
+                                   getF32Constant(DAG, 0x4042902c));
     }
-  } else {
-    // No special expansion.
-    result = DAG.getNode(ISD::FLOG2, dl,
-                         getValue(I.getArgOperand(0)).getValueType(),
-                         getValue(I.getArgOperand(0)));
+
+    return DAG.getNode(ISD::FADD, dl, MVT::f32, LogOfExponent, Log2ofMantissa);
   }
 
-  setValue(&I, result);
+  // No special expansion.
+  return DAG.getNode(ISD::FLOG2, dl, Op.getValueType(), Op);
 }
 
-/// visitLog10 - Lower a log10 intrinsic. Handles the special sequences for
+/// expandLog10 - Lower a log10 intrinsic. Handles the special sequences for
 /// limited-precision mode.
-void
-SelectionDAGBuilder::visitLog10(const CallInst &I) {
-  SDValue result;
-  DebugLoc dl = getCurDebugLoc();
-
-  if (getValue(I.getArgOperand(0)).getValueType() == MVT::f32 &&
+static SDValue expandLog10(DebugLoc dl, SDValue Op, SelectionDAG &DAG,
+                           const TargetLowering &TLI) {
+  if (Op.getValueType() == MVT::f32 &&
       LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    SDValue Op = getValue(I.getArgOperand(0));
     SDValue Op1 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, Op);
 
     // Scale the exponent by log10(2) [0.30102999f].
@@ -4030,6 +3998,7 @@ SelectionDAGBuilder::visitLog10(const CallInst &I) {
     // exponent of 1.
     SDValue X = GetSignificand(DAG, Op1, dl);
 
+    SDValue Log10ofMantissa;
     if (LimitFloatPrecision <= 6) {
       // For floating-point precision of 6:
       //
@@ -4043,12 +4012,9 @@ SelectionDAGBuilder::visitLog10(const CallInst &I) {
       SDValue t1 = DAG.getNode(ISD::FADD, dl, MVT::f32, t0,
                                getF32Constant(DAG, 0x3f1c0789));
       SDValue t2 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t1, X);
-      SDValue Log10ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t2,
-                                            getF32Constant(DAG, 0x3f011300));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, Log10ofMantissa);
-    } else if (LimitFloatPrecision > 6 && LimitFloatPrecision <= 12) {
+      Log10ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t2,
+                                    getF32Constant(DAG, 0x3f011300));
+    } else if (LimitFloatPrecision <= 12) {
       // For floating-point precision of 12:
       //
       //   Log10ofMantissa =
@@ -4065,12 +4031,9 @@ SelectionDAGBuilder::visitLog10(const CallInst &I) {
       SDValue t3 = DAG.getNode(ISD::FADD, dl, MVT::f32, t2,
                                getF32Constant(DAG, 0x3f6ae232));
       SDValue t4 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t3, X);
-      SDValue Log10ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t4,
-                                            getF32Constant(DAG, 0x3f25f7c3));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, Log10ofMantissa);
-    } else { // LimitFloatPrecision > 12 && LimitFloatPrecision <= 18
+      Log10ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t4,
+                                    getF32Constant(DAG, 0x3f25f7c3));
+    } else { // LimitFloatPrecision <= 18
       // For floating-point precision of 18:
       //
       //   Log10ofMantissa =
@@ -4095,33 +4058,23 @@ SelectionDAGBuilder::visitLog10(const CallInst &I) {
       SDValue t7 = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
                                getF32Constant(DAG, 0x3fc4316c));
       SDValue t8 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t7, X);
-      SDValue Log10ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t8,
-                                            getF32Constant(DAG, 0x3f57ce70));
-
-      result = DAG.getNode(ISD::FADD, dl,
-                           MVT::f32, LogOfExponent, Log10ofMantissa);
+      Log10ofMantissa = DAG.getNode(ISD::FSUB, dl, MVT::f32, t8,
+                                    getF32Constant(DAG, 0x3f57ce70));
     }
-  } else {
-    // No special expansion.
-    result = DAG.getNode(ISD::FLOG10, dl,
-                         getValue(I.getArgOperand(0)).getValueType(),
-                         getValue(I.getArgOperand(0)));
+
+    return DAG.getNode(ISD::FADD, dl, MVT::f32, LogOfExponent, Log10ofMantissa);
   }
 
-  setValue(&I, result);
+  // No special expansion.
+  return DAG.getNode(ISD::FLOG10, dl, Op.getValueType(), Op);
 }
 
-/// visitExp2 - Lower an exp2 intrinsic. Handles the special sequences for
+/// expandExp2 - Lower an exp2 intrinsic. Handles the special sequences for
 /// limited-precision mode.
-void
-SelectionDAGBuilder::visitExp2(const CallInst &I) {
-  SDValue result;
-  DebugLoc dl = getCurDebugLoc();
-
-  if (getValue(I.getArgOperand(0)).getValueType() == MVT::f32 &&
+static SDValue expandExp2(DebugLoc dl, SDValue Op, SelectionDAG &DAG,
+                          const TargetLowering &TLI) {
+  if (Op.getValueType() == MVT::f32 &&
       LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    SDValue Op = getValue(I.getArgOperand(0));
-
     SDValue IntegerPartOfX = DAG.getNode(ISD::FP_TO_SINT, dl, MVT::i32, Op);
 
     //   FractionalPartOfX = x - (float)IntegerPartOfX;
@@ -4132,6 +4085,7 @@ SelectionDAGBuilder::visitExp2(const CallInst &I) {
     IntegerPartOfX = DAG.getNode(ISD::SHL, dl, MVT::i32, IntegerPartOfX,
                                  DAG.getConstant(23, TLI.getPointerTy()));
 
+    SDValue TwoToFractionalPartOfX;
     if (LimitFloatPrecision <= 6) {
       // For floating-point precision of 6:
       //
@@ -4145,15 +4099,9 @@ SelectionDAGBuilder::visitExp2(const CallInst &I) {
       SDValue t3 = DAG.getNode(ISD::FADD, dl, MVT::f32, t2,
                                getF32Constant(DAG, 0x3f3c50c8));
       SDValue t4 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t3, X);
-      SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
-                               getF32Constant(DAG, 0x3f7f5e7e));
-      SDValue t6 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, t5);
-      SDValue TwoToFractionalPartOfX =
-        DAG.getNode(ISD::ADD, dl, MVT::i32, t6, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl,
-                           MVT::f32, TwoToFractionalPartOfX);
-    } else if (LimitFloatPrecision > 6 && LimitFloatPrecision <= 12) {
+      TwoToFractionalPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
+                                           getF32Constant(DAG, 0x3f7f5e7e));
+    } else if (LimitFloatPrecision <= 12) {
       // For floating-point precision of 12:
       //
       //   TwoToFractionalPartOfX =
@@ -4170,15 +4118,9 @@ SelectionDAGBuilder::visitExp2(const CallInst &I) {
       SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
                                getF32Constant(DAG, 0x3f324b07));
       SDValue t6 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t5, X);
-      SDValue t7 = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
-                               getF32Constant(DAG, 0x3f7ff8fd));
-      SDValue t8 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, t7);
-      SDValue TwoToFractionalPartOfX =
-        DAG.getNode(ISD::ADD, dl, MVT::i32, t8, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl,
-                           MVT::f32, TwoToFractionalPartOfX);
-    } else { // LimitFloatPrecision > 12 && LimitFloatPrecision <= 18
+      TwoToFractionalPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
+                                           getF32Constant(DAG, 0x3f7ff8fd));
+    } else { // LimitFloatPrecision <= 18
       // For floating-point precision of 18:
       //
       //   TwoToFractionalPartOfX =
@@ -4206,54 +4148,42 @@ SelectionDAGBuilder::visitExp2(const CallInst &I) {
       SDValue t11 = DAG.getNode(ISD::FADD, dl, MVT::f32, t10,
                                 getF32Constant(DAG, 0x3f317234));
       SDValue t12 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t11, X);
-      SDValue t13 = DAG.getNode(ISD::FADD, dl, MVT::f32, t12,
-                                getF32Constant(DAG, 0x3f800000));
-      SDValue t14 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, t13);
-      SDValue TwoToFractionalPartOfX =
-        DAG.getNode(ISD::ADD, dl, MVT::i32, t14, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl,
-                           MVT::f32, TwoToFractionalPartOfX);
+      TwoToFractionalPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t12,
+                                           getF32Constant(DAG, 0x3f800000));
     }
-  } else {
-    // No special expansion.
-    result = DAG.getNode(ISD::FEXP2, dl,
-                         getValue(I.getArgOperand(0)).getValueType(),
-                         getValue(I.getArgOperand(0)));
+
+    // Add the exponent into the result in integer domain.
+    SDValue t13 = DAG.getNode(ISD::BITCAST, dl, MVT::i32,
+                              TwoToFractionalPartOfX);
+    return DAG.getNode(ISD::BITCAST, dl, MVT::f32,
+                       DAG.getNode(ISD::ADD, dl, MVT::i32,
+                                   t13, IntegerPartOfX));
   }
 
-  setValue(&I, result);
+  // No special expansion.
+  return DAG.getNode(ISD::FEXP2, dl, Op.getValueType(), Op);
 }
 
 /// visitPow - Lower a pow intrinsic. Handles the special sequences for
 /// limited-precision mode with x == 10.0f.
-void
-SelectionDAGBuilder::visitPow(const CallInst &I) {
-  SDValue result;
-  const Value *Val = I.getArgOperand(0);
-  DebugLoc dl = getCurDebugLoc();
+static SDValue expandPow(DebugLoc dl, SDValue LHS, SDValue RHS,
+                         SelectionDAG &DAG, const TargetLowering &TLI) {
   bool IsExp10 = false;
-
-  if (getValue(Val).getValueType() == MVT::f32 &&
-      getValue(I.getArgOperand(1)).getValueType() == MVT::f32 &&
+  if (LHS.getValueType() == MVT::f32 && LHS.getValueType() == MVT::f32 &&
       LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    if (Constant *C = const_cast<Constant*>(dyn_cast<Constant>(Val))) {
-      if (ConstantFP *CFP = dyn_cast<ConstantFP>(C)) {
-        APFloat Ten(10.0f);
-        IsExp10 = CFP->getValueAPF().bitwiseIsEqual(Ten);
-      }
+    if (ConstantFPSDNode *LHSC = dyn_cast<ConstantFPSDNode>(LHS)) {
+      APFloat Ten(10.0f);
+      IsExp10 = LHSC->isExactlyValue(Ten);
     }
   }
 
-  if (IsExp10 && LimitFloatPrecision > 0 && LimitFloatPrecision <= 18) {
-    SDValue Op = getValue(I.getArgOperand(1));
-
+  if (IsExp10) {
     // Put the exponent in the right bit position for later addition to the
     // final result:
     //
     //   #define LOG2OF10 3.3219281f
     //   IntegerPartOfX = (int32_t)(x * LOG2OF10);
-    SDValue t0 = DAG.getNode(ISD::FMUL, dl, MVT::f32, Op,
+    SDValue t0 = DAG.getNode(ISD::FMUL, dl, MVT::f32, RHS,
                              getF32Constant(DAG, 0x40549a78));
     SDValue IntegerPartOfX = DAG.getNode(ISD::FP_TO_SINT, dl, MVT::i32, t0);
 
@@ -4265,6 +4195,7 @@ SelectionDAGBuilder::visitPow(const CallInst &I) {
     IntegerPartOfX = DAG.getNode(ISD::SHL, dl, MVT::i32, IntegerPartOfX,
                                  DAG.getConstant(23, TLI.getPointerTy()));
 
+    SDValue TwoToFractionalPartOfX;
     if (LimitFloatPrecision <= 6) {
       // For floating-point precision of 6:
       //
@@ -4278,15 +4209,9 @@ SelectionDAGBuilder::visitPow(const CallInst &I) {
       SDValue t3 = DAG.getNode(ISD::FADD, dl, MVT::f32, t2,
                                getF32Constant(DAG, 0x3f3c50c8));
       SDValue t4 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t3, X);
-      SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
-                               getF32Constant(DAG, 0x3f7f5e7e));
-      SDValue t6 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, t5);
-      SDValue TwoToFractionalPartOfX =
-        DAG.getNode(ISD::ADD, dl, MVT::i32, t6, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl,
-                           MVT::f32, TwoToFractionalPartOfX);
-    } else if (LimitFloatPrecision > 6 && LimitFloatPrecision <= 12) {
+      TwoToFractionalPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
+                                           getF32Constant(DAG, 0x3f7f5e7e));
+    } else if (LimitFloatPrecision <= 12) {
       // For floating-point precision of 12:
       //
       //   TwoToFractionalPartOfX =
@@ -4303,15 +4228,9 @@ SelectionDAGBuilder::visitPow(const CallInst &I) {
       SDValue t5 = DAG.getNode(ISD::FADD, dl, MVT::f32, t4,
                                getF32Constant(DAG, 0x3f324b07));
       SDValue t6 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t5, X);
-      SDValue t7 = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
-                               getF32Constant(DAG, 0x3f7ff8fd));
-      SDValue t8 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, t7);
-      SDValue TwoToFractionalPartOfX =
-        DAG.getNode(ISD::ADD, dl, MVT::i32, t8, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl,
-                           MVT::f32, TwoToFractionalPartOfX);
-    } else { // LimitFloatPrecision > 12 && LimitFloatPrecision <= 18
+      TwoToFractionalPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t6,
+                                           getF32Constant(DAG, 0x3f7ff8fd));
+    } else { // LimitFloatPrecision <= 18
       // For floating-point precision of 18:
       //
       //   TwoToFractionalPartOfX =
@@ -4339,24 +4258,18 @@ SelectionDAGBuilder::visitPow(const CallInst &I) {
       SDValue t11 = DAG.getNode(ISD::FADD, dl, MVT::f32, t10,
                                 getF32Constant(DAG, 0x3f317234));
       SDValue t12 = DAG.getNode(ISD::FMUL, dl, MVT::f32, t11, X);
-      SDValue t13 = DAG.getNode(ISD::FADD, dl, MVT::f32, t12,
-                                getF32Constant(DAG, 0x3f800000));
-      SDValue t14 = DAG.getNode(ISD::BITCAST, dl, MVT::i32, t13);
-      SDValue TwoToFractionalPartOfX =
-        DAG.getNode(ISD::ADD, dl, MVT::i32, t14, IntegerPartOfX);
-
-      result = DAG.getNode(ISD::BITCAST, dl,
-                           MVT::f32, TwoToFractionalPartOfX);
+      TwoToFractionalPartOfX = DAG.getNode(ISD::FADD, dl, MVT::f32, t12,
+                                           getF32Constant(DAG, 0x3f800000));
     }
-  } else {
-    // No special expansion.
-    result = DAG.getNode(ISD::FPOW, dl,
-                         getValue(I.getArgOperand(0)).getValueType(),
-                         getValue(I.getArgOperand(0)),
-                         getValue(I.getArgOperand(1)));
+
+    SDValue t13 = DAG.getNode(ISD::BITCAST, dl,MVT::i32,TwoToFractionalPartOfX);
+    return DAG.getNode(ISD::BITCAST, dl, MVT::f32,
+                       DAG.getNode(ISD::ADD, dl, MVT::i32,
+                                   t13, IntegerPartOfX));
   }
 
-  setValue(&I, result);
+  // No special expansion.
+  return DAG.getNode(ISD::FPOW, dl, LHS.getValueType(), LHS, RHS);
 }
 
 
@@ -4377,7 +4290,7 @@ static SDValue ExpandPowI(DebugLoc DL, SDValue LHS, SDValue RHS,
       return DAG.getConstantFP(1.0, LHS.getValueType());
 
     const Function *F = DAG.getMachineFunction().getFunction();
-    if (!F->hasFnAttr(Attribute::OptimizeForSize) ||
+    if (!F->getFnAttributes().hasAttribute(Attributes::OptimizeForSize) ||
         // If optimizing for size, don't insert too many multiplies.  This
         // inserts up to 5 multiplies.
         CountPopulation_32(Val)+Log2_32(Val) < 7) {
@@ -4850,7 +4763,6 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     // the sse2/mmx shift instructions reads 64 bits. Set the upper 32 bits
     // to be zero.
     // We must do this early because v2i32 is not a legal type.
-    DebugLoc dl = getCurDebugLoc();
     SDValue ShOps[2];
     ShOps[0] = ShAmt;
     ShOps[1] = DAG.getConstant(0, MVT::i32);
@@ -4867,7 +4779,6 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
   case Intrinsic::x86_avx_vinsertf128_ps_256:
   case Intrinsic::x86_avx_vinsertf128_si_256:
   case Intrinsic::x86_avx2_vinserti128: {
-    DebugLoc dl = getCurDebugLoc();
     EVT DestVT = TLI.getValueType(I.getType());
     EVT ElVT = TLI.getValueType(I.getArgOperand(1)->getType());
     uint64_t Idx = (cast<ConstantInt>(I.getArgOperand(2))->getZExtValue() & 1) *
@@ -4883,7 +4794,6 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
   case Intrinsic::x86_avx_vextractf128_ps_256:
   case Intrinsic::x86_avx_vextractf128_si_256:
   case Intrinsic::x86_avx2_vextracti128: {
-    DebugLoc dl = getCurDebugLoc();
     EVT DestVT = TLI.getValueType(I.getType());
     uint64_t Idx = (cast<ConstantInt>(I.getArgOperand(1))->getZExtValue() & 1) *
                    DestVT.getVectorNumElements();
@@ -4917,7 +4827,7 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     }
     EVT DestVT = TLI.getValueType(I.getType());
     const Value *Op1 = I.getArgOperand(0);
-    Res = DAG.getConvertRndSat(DestVT, getCurDebugLoc(), getValue(Op1),
+    Res = DAG.getConvertRndSat(DestVT, dl, getValue(Op1),
                                DAG.getValueType(DestVT),
                                DAG.getValueType(getValue(Op1).getValueType()),
                                getValue(I.getArgOperand(1)),
@@ -4926,53 +4836,57 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     setValue(&I, Res);
     return 0;
   }
-  case Intrinsic::sqrt:
-    setValue(&I, DAG.getNode(ISD::FSQRT, dl,
-                             getValue(I.getArgOperand(0)).getValueType(),
-                             getValue(I.getArgOperand(0))));
-    return 0;
   case Intrinsic::powi:
     setValue(&I, ExpandPowI(dl, getValue(I.getArgOperand(0)),
                             getValue(I.getArgOperand(1)), DAG));
     return 0;
-  case Intrinsic::sin:
-    setValue(&I, DAG.getNode(ISD::FSIN, dl,
-                             getValue(I.getArgOperand(0)).getValueType(),
-                             getValue(I.getArgOperand(0))));
-    return 0;
-  case Intrinsic::cos:
-    setValue(&I, DAG.getNode(ISD::FCOS, dl,
-                             getValue(I.getArgOperand(0)).getValueType(),
-                             getValue(I.getArgOperand(0))));
-    return 0;
   case Intrinsic::log:
-    visitLog(I);
+    setValue(&I, expandLog(dl, getValue(I.getArgOperand(0)), DAG, TLI));
     return 0;
   case Intrinsic::log2:
-    visitLog2(I);
+    setValue(&I, expandLog2(dl, getValue(I.getArgOperand(0)), DAG, TLI));
     return 0;
   case Intrinsic::log10:
-    visitLog10(I);
+    setValue(&I, expandLog10(dl, getValue(I.getArgOperand(0)), DAG, TLI));
     return 0;
   case Intrinsic::exp:
-    visitExp(I);
+    setValue(&I, expandExp(dl, getValue(I.getArgOperand(0)), DAG, TLI));
     return 0;
   case Intrinsic::exp2:
-    visitExp2(I);
+    setValue(&I, expandExp2(dl, getValue(I.getArgOperand(0)), DAG, TLI));
     return 0;
   case Intrinsic::pow:
-    visitPow(I);
+    setValue(&I, expandPow(dl, getValue(I.getArgOperand(0)),
+                           getValue(I.getArgOperand(1)), DAG, TLI));
     return 0;
+  case Intrinsic::sqrt:
   case Intrinsic::fabs:
-    setValue(&I, DAG.getNode(ISD::FABS, dl,
-                             getValue(I.getArgOperand(0)).getValueType(),
-                             getValue(I.getArgOperand(0))));
-    return 0;
+  case Intrinsic::sin:
+  case Intrinsic::cos:
   case Intrinsic::floor:
-    setValue(&I, DAG.getNode(ISD::FFLOOR, dl,
+  case Intrinsic::ceil:
+  case Intrinsic::trunc:
+  case Intrinsic::rint:
+  case Intrinsic::nearbyint: {
+    unsigned Opcode;
+    switch (Intrinsic) {
+    default: llvm_unreachable("Impossible intrinsic");  // Can't reach here.
+    case Intrinsic::sqrt:      Opcode = ISD::FSQRT;      break;
+    case Intrinsic::fabs:      Opcode = ISD::FABS;       break;
+    case Intrinsic::sin:       Opcode = ISD::FSIN;       break;
+    case Intrinsic::cos:       Opcode = ISD::FCOS;       break;
+    case Intrinsic::floor:     Opcode = ISD::FFLOOR;     break;
+    case Intrinsic::ceil:      Opcode = ISD::FCEIL;      break;
+    case Intrinsic::trunc:     Opcode = ISD::FTRUNC;     break;
+    case Intrinsic::rint:      Opcode = ISD::FRINT;      break;
+    case Intrinsic::nearbyint: Opcode = ISD::FNEARBYINT; break;
+    }
+
+    setValue(&I, DAG.getNode(Opcode, dl,
                              getValue(I.getArgOperand(0)).getValueType(),
                              getValue(I.getArgOperand(0))));
     return 0;
+  }
   case Intrinsic::fma:
     setValue(&I, DAG.getNode(ISD::FMA, dl,
                              getValue(I.getArgOperand(0)).getValueType(),
@@ -4983,7 +4897,7 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
   case Intrinsic::fmuladd: {
     EVT VT = TLI.getValueType(I.getType());
     if (TM.Options.AllowFPOpFusion != FPOpFusion::Strict &&
-        TLI.isOperationLegal(ISD::FMA, VT) &&
+        TLI.isOperationLegalOrCustom(ISD::FMA, VT) &&
         TLI.isFMAFasterThanMulAndAdd(VT)){
       setValue(&I, DAG.getNode(ISD::FMA, dl,
                                getValue(I.getArgOperand(0)).getValueType(),
@@ -5080,7 +4994,7 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     SDValue FIN = DAG.getFrameIndex(FI, PtrTy);
 
     // Store the stack protector onto the stack.
-    Res = DAG.getStore(getRoot(), getCurDebugLoc(), Src, FIN,
+    Res = DAG.getStore(getRoot(), dl, Src, FIN,
                        MachinePointerInfo::getFixedStack(FI),
                        true, false, 0);
     setValue(&I, Res);
@@ -5152,10 +5066,13 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     return 0;
   }
 
+  case Intrinsic::debugtrap:
   case Intrinsic::trap: {
     StringRef TrapFuncName = TM.Options.getTrapFunctionName();
     if (TrapFuncName.empty()) {
-      DAG.setRoot(DAG.getNode(ISD::TRAP, dl,MVT::Other, getRoot()));
+      ISD::NodeType Op = (Intrinsic == Intrinsic::trap) ? 
+        ISD::TRAP : ISD::DEBUGTRAP;
+      DAG.setRoot(DAG.getNode(Op, dl,MVT::Other, getRoot()));
       return 0;
     }
     TargetLowering::ArgListTy Args;
@@ -5165,15 +5082,12 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
                  /*isTailCall=*/false,
                  /*doesNotRet=*/false, /*isReturnValueUsed=*/true,
                  DAG.getExternalSymbol(TrapFuncName.data(), TLI.getPointerTy()),
-                 Args, DAG, getCurDebugLoc());
+                 Args, DAG, dl);
     std::pair<SDValue, SDValue> Result = TLI.LowerCallTo(CLI);
     DAG.setRoot(Result.second);
     return 0;
   }
-  case Intrinsic::debugtrap: {
-    DAG.setRoot(DAG.getNode(ISD::DEBUGTRAP, dl,MVT::Other, getRoot()));
-    return 0;
-  }
+
   case Intrinsic::uadd_with_overflow:
   case Intrinsic::sadd_with_overflow:
   case Intrinsic::usub_with_overflow:
@@ -5194,7 +5108,7 @@ SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I, unsigned Intrinsic) {
     SDValue Op2 = getValue(I.getArgOperand(1));
 
     SDVTList VTs = DAG.getVTList(Op1.getValueType(), MVT::i1);
-    setValue(&I, DAG.getNode(Op, getCurDebugLoc(), VTs, Op1, Op2));
+    setValue(&I, DAG.getNode(Op, dl, VTs, Op1, Op2));
     return 0;
   }
   case Intrinsic::prefetch: {
@@ -5285,9 +5199,9 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
   int DemoteStackIdx = -100;
 
   if (!CanLowerReturn) {
-    uint64_t TySize = TLI.getTargetData()->getTypeAllocSize(
+    uint64_t TySize = TLI.getDataLayout()->getTypeAllocSize(
                       FTy->getReturnType());
-    unsigned Align  = TLI.getTargetData()->getPrefTypeAlignment(
+    unsigned Align  = TLI.getDataLayout()->getPrefTypeAlignment(
                       FTy->getReturnType());
     MachineFunction &MF = DAG.getMachineFunction();
     DemoteStackIdx = MF.getFrameInfo()->CreateStackObject(TySize, Align, false);
@@ -5319,12 +5233,12 @@ void SelectionDAGBuilder::LowerCallTo(ImmutableCallSite CS, SDValue Callee,
     Entry.Node = ArgNode; Entry.Ty = V->getType();
 
     unsigned attrInd = i - CS.arg_begin() + 1;
-    Entry.isSExt  = CS.paramHasAttr(attrInd, Attribute::SExt);
-    Entry.isZExt  = CS.paramHasAttr(attrInd, Attribute::ZExt);
-    Entry.isInReg = CS.paramHasAttr(attrInd, Attribute::InReg);
-    Entry.isSRet  = CS.paramHasAttr(attrInd, Attribute::StructRet);
-    Entry.isNest  = CS.paramHasAttr(attrInd, Attribute::Nest);
-    Entry.isByVal = CS.paramHasAttr(attrInd, Attribute::ByVal);
+    Entry.isSExt  = CS.paramHasAttr(attrInd, Attributes::SExt);
+    Entry.isZExt  = CS.paramHasAttr(attrInd, Attributes::ZExt);
+    Entry.isInReg = CS.paramHasAttr(attrInd, Attributes::InReg);
+    Entry.isSRet  = CS.paramHasAttr(attrInd, Attributes::StructRet);
+    Entry.isNest  = CS.paramHasAttr(attrInd, Attributes::Nest);
+    Entry.isByVal = CS.paramHasAttr(attrInd, Attributes::ByVal);
     Entry.Alignment = CS.getParamAlignment(attrInd);
     Args.push_back(Entry);
   }
@@ -5752,7 +5666,7 @@ public:
   /// MVT::Other.
   EVT getCallOperandValEVT(LLVMContext &Context,
                            const TargetLowering &TLI,
-                           const TargetData *TD) const {
+                           const DataLayout *TD) const {
     if (CallOperandVal == 0) return MVT::Other;
 
     if (isa<BasicBlock>(CallOperandVal))
@@ -6056,8 +5970,8 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
         // Otherwise, create a stack slot and emit a store to it before the
         // asm.
         Type *Ty = OpVal->getType();
-        uint64_t TySize = TLI.getTargetData()->getTypeAllocSize(Ty);
-        unsigned Align  = TLI.getTargetData()->getPrefTypeAlignment(Ty);
+        uint64_t TySize = TLI.getDataLayout()->getTypeAllocSize(Ty);
+        unsigned Align  = TLI.getDataLayout()->getPrefTypeAlignment(Ty);
         MachineFunction &MF = DAG.getMachineFunction();
         int SSFI = MF.getFrameInfo()->CreateStackObject(TySize, Align, false);
         SDValue StackSlot = DAG.getFrameIndex(SSFI, TLI.getPointerTy());
@@ -6105,7 +6019,8 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
   const MDNode *SrcLoc = CS.getInstruction()->getMetadata("srcloc");
   AsmNodeOperands.push_back(DAG.getMDNode(SrcLoc));
 
-  // Remember the HasSideEffect, AlignStack and AsmDialect bits as operand 3.
+  // Remember the HasSideEffect, AlignStack, AsmDialect, MayLoad and MayStore
+  // bits as operand 3.
   unsigned ExtraInfo = 0;
   if (IA->hasSideEffects())
     ExtraInfo |= InlineAsm::Extra_HasSideEffects;
@@ -6113,6 +6028,27 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
     ExtraInfo |= InlineAsm::Extra_IsAlignStack;
   // Set the asm dialect.
   ExtraInfo |= IA->getDialect() * InlineAsm::Extra_AsmDialect;
+
+  // Determine if this InlineAsm MayLoad or MayStore based on the constraints.
+  for (unsigned i = 0, e = TargetConstraints.size(); i != e; ++i) {
+    TargetLowering::AsmOperandInfo &OpInfo = TargetConstraints[i];
+
+    // Compute the constraint code and ConstraintType to use.
+    TLI.ComputeConstraintToUse(OpInfo, SDValue());
+
+    // Ideally, we would only check against memory constraints.  However, the
+    // meaning of an other constraint can be target-specific and we can't easily
+    // reason about it.  Therefore, be conservative and set MayLoad/MayStore
+    // for other constriants as well.
+    if (OpInfo.ConstraintType == TargetLowering::C_Memory ||
+        OpInfo.ConstraintType == TargetLowering::C_Other) {
+      if (OpInfo.Type == InlineAsm::isInput)
+        ExtraInfo |= InlineAsm::Extra_MayLoad;
+      else if (OpInfo.Type == InlineAsm::isOutput)
+        ExtraInfo |= InlineAsm::Extra_MayStore;
+    }
+  }
+
   AsmNodeOperands.push_back(DAG.getTargetConstant(ExtraInfo,
                                                   TLI.getPointerTy()));
 
@@ -6222,7 +6158,7 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
 
           // Use the produced MatchedRegs object to
           MatchedRegs.getCopyToRegs(InOperandVal, DAG, getCurDebugLoc(),
-                                    Chain, &Flag);
+                                    Chain, &Flag, CS.getInstruction());
           MatchedRegs.AddInlineAsmOperands(InlineAsm::Kind_RegUse,
                                            true, OpInfo.getMatchedOperand(),
                                            DAG, AsmNodeOperands);
@@ -6304,7 +6240,7 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
       }
 
       OpInfo.AssignedRegs.getCopyToRegs(InOperandVal, DAG, getCurDebugLoc(),
-                                        Chain, &Flag);
+                                        Chain, &Flag, CS.getInstruction());
 
       OpInfo.AssignedRegs.AddInlineAsmOperands(InlineAsm::Kind_RegUse, false, 0,
                                                DAG, AsmNodeOperands);
@@ -6335,7 +6271,7 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
   // and set it as the value of the call.
   if (!RetValRegs.Regs.empty()) {
     SDValue Val = RetValRegs.getCopyFromRegs(DAG, FuncInfo, getCurDebugLoc(),
-                                             Chain, &Flag);
+                                             Chain, &Flag, CS.getInstruction());
 
     // FIXME: Why don't we do this for inline asms with MRVs?
     if (CS.getType()->isSingleValueType() && CS.getType()->isSized()) {
@@ -6375,7 +6311,7 @@ void SelectionDAGBuilder::visitInlineAsm(ImmutableCallSite CS) {
     RegsForValue &OutRegs = IndirectStoresToEmit[i].first;
     const Value *Ptr = IndirectStoresToEmit[i].second;
     SDValue OutVal = OutRegs.getCopyFromRegs(DAG, FuncInfo, getCurDebugLoc(),
-                                             Chain, &Flag);
+                                             Chain, &Flag, IA);
     StoresToEmit.push_back(std::make_pair(OutVal, Ptr));
   }
 
@@ -6405,7 +6341,7 @@ void SelectionDAGBuilder::visitVAStart(const CallInst &I) {
 }
 
 void SelectionDAGBuilder::visitVAArg(const VAArgInst &I) {
-  const TargetData &TD = *TLI.getTargetData();
+  const DataLayout &TD = *TLI.getDataLayout();
   SDValue V = DAG.getVAArg(TLI.getValueType(I.getType()), getCurDebugLoc(),
                            getRoot(), getValue(I.getOperand(0)),
                            DAG.getSrcValue(I.getOperand(0)),
@@ -6451,7 +6387,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
                            Args[i].Node.getResNo() + Value);
       ISD::ArgFlagsTy Flags;
       unsigned OriginalAlignment =
-        getTargetData()->getABITypeAlignment(ArgTy);
+        getDataLayout()->getABITypeAlignment(ArgTy);
 
       if (Args[i].isZExt)
         Flags.setZExt();
@@ -6465,7 +6401,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
         Flags.setByVal();
         PointerType *Ty = cast<PointerType>(Args[i].Ty);
         Type *ElementTy = Ty->getElementType();
-        Flags.setByValSize(getTargetData()->getTypeAllocSize(ElementTy));
+        Flags.setByValSize(getDataLayout()->getTypeAllocSize(ElementTy));
         // For ByVal, alignment should come from FE.  BE will guess if this
         // info is not there but there are cases it cannot get right.
         unsigned FrameAlign;
@@ -6490,12 +6426,13 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
         ExtendKind = ISD::ZERO_EXTEND;
 
       getCopyToParts(CLI.DAG, CLI.DL, Op, &Parts[0], NumParts,
-                     PartVT, ExtendKind);
+                     PartVT, CLI.CS ? CLI.CS->getInstruction() : 0, ExtendKind);
 
       for (unsigned j = 0; j != NumParts; ++j) {
         // if it isn't first piece, alignment must be 1
         ISD::OutputArg MyFlags(Flags, Parts[j].getValueType(),
-                               i < CLI.NumFixedArgs);
+                               i < CLI.NumFixedArgs,
+                               i, j*Parts[j].getValueType().getStoreSize());
         if (NumParts > 1 && j == 0)
           MyFlags.Flags.setSplit();
         else if (j != 0)
@@ -6571,7 +6508,7 @@ TargetLowering::LowerCallTo(TargetLowering::CallLoweringInfo &CLI) const {
     unsigned NumRegs = getNumRegisters(CLI.RetTy->getContext(), VT);
 
     ReturnValues.push_back(getCopyFromParts(CLI.DAG, CLI.DL, &InVals[CurReg],
-                                            NumRegs, RegisterVT, VT,
+                                            NumRegs, RegisterVT, VT, NULL,
                                             AssertOp));
     CurReg += NumRegs;
   }
@@ -6610,7 +6547,7 @@ SelectionDAGBuilder::CopyValueToVirtualRegister(const Value *V, unsigned Reg) {
 
   RegsForValue RFV(V->getContext(), TLI, Reg, V->getType());
   SDValue Chain = DAG.getEntryNode();
-  RFV.getCopyToRegs(Op, DAG, getCurDebugLoc(), Chain, 0);
+  RFV.getCopyToRegs(Op, DAG, getCurDebugLoc(), Chain, 0, V);
   PendingExports.push_back(Chain);
 }
 
@@ -6640,7 +6577,7 @@ void SelectionDAGISel::LowerArguments(const BasicBlock *LLVMBB) {
   const Function &F = *LLVMBB->getParent();
   SelectionDAG &DAG = SDB->DAG;
   DebugLoc dl = SDB->getCurDebugLoc();
-  const TargetData *TD = TLI.getTargetData();
+  const DataLayout *TD = TLI.getDataLayout();
   SmallVector<ISD::InputArg, 16> Ins;
 
   // Check whether the function can return without sret-demotion.
@@ -6658,7 +6595,7 @@ void SelectionDAGISel::LowerArguments(const BasicBlock *LLVMBB) {
     ISD::ArgFlagsTy Flags;
     Flags.setSRet();
     EVT RegisterVT = TLI.getRegisterType(*DAG.getContext(), ValueVTs[0]);
-    ISD::InputArg RetArg(Flags, RegisterVT, true);
+    ISD::InputArg RetArg(Flags, RegisterVT, true, 0, 0);
     Ins.push_back(RetArg);
   }
 
@@ -6677,15 +6614,15 @@ void SelectionDAGISel::LowerArguments(const BasicBlock *LLVMBB) {
       unsigned OriginalAlignment =
         TD->getABITypeAlignment(ArgTy);
 
-      if (F.paramHasAttr(Idx, Attribute::ZExt))
+      if (F.getParamAttributes(Idx).hasAttribute(Attributes::ZExt))
         Flags.setZExt();
-      if (F.paramHasAttr(Idx, Attribute::SExt))
+      if (F.getParamAttributes(Idx).hasAttribute(Attributes::SExt))
         Flags.setSExt();
-      if (F.paramHasAttr(Idx, Attribute::InReg))
+      if (F.getParamAttributes(Idx).hasAttribute(Attributes::InReg))
         Flags.setInReg();
-      if (F.paramHasAttr(Idx, Attribute::StructRet))
+      if (F.getParamAttributes(Idx).hasAttribute(Attributes::StructRet))
         Flags.setSRet();
-      if (F.paramHasAttr(Idx, Attribute::ByVal)) {
+      if (F.getParamAttributes(Idx).hasAttribute(Attributes::ByVal)) {
         Flags.setByVal();
         PointerType *Ty = cast<PointerType>(I->getType());
         Type *ElementTy = Ty->getElementType();
@@ -6699,14 +6636,15 @@ void SelectionDAGISel::LowerArguments(const BasicBlock *LLVMBB) {
           FrameAlign = TLI.getByValTypeAlignment(ElementTy);
         Flags.setByValAlign(FrameAlign);
       }
-      if (F.paramHasAttr(Idx, Attribute::Nest))
+      if (F.getParamAttributes(Idx).hasAttribute(Attributes::Nest))
         Flags.setNest();
       Flags.setOrigAlign(OriginalAlignment);
 
       EVT RegisterVT = TLI.getRegisterType(*CurDAG->getContext(), VT);
       unsigned NumRegs = TLI.getNumRegisters(*CurDAG->getContext(), VT);
       for (unsigned i = 0; i != NumRegs; ++i) {
-        ISD::InputArg MyFlags(Flags, RegisterVT, isArgValueUsed);
+        ISD::InputArg MyFlags(Flags, RegisterVT, isArgValueUsed,
+                              Idx-1, i*RegisterVT.getStoreSize());
         if (NumRegs > 1 && i == 0)
           MyFlags.Flags.setSplit();
         // if it isn't first piece, alignment must be 1
@@ -6752,7 +6690,7 @@ void SelectionDAGISel::LowerArguments(const BasicBlock *LLVMBB) {
     EVT RegVT = TLI.getRegisterType(*CurDAG->getContext(), VT);
     ISD::NodeType AssertOp = ISD::DELETED_NODE;
     SDValue ArgValue = getCopyFromParts(DAG, dl, &InVals[0], 1,
-                                        RegVT, VT, AssertOp);
+                                        RegVT, VT, NULL, AssertOp);
 
     MachineFunction& MF = SDB->DAG.getMachineFunction();
     MachineRegisterInfo& RegInfo = MF.getRegInfo();
@@ -6786,14 +6724,14 @@ void SelectionDAGISel::LowerArguments(const BasicBlock *LLVMBB) {
 
       if (!I->use_empty()) {
         ISD::NodeType AssertOp = ISD::DELETED_NODE;
-        if (F.paramHasAttr(Idx, Attribute::SExt))
+        if (F.getParamAttributes(Idx).hasAttribute(Attributes::SExt))
           AssertOp = ISD::AssertSext;
-        else if (F.paramHasAttr(Idx, Attribute::ZExt))
+        else if (F.getParamAttributes(Idx).hasAttribute(Attributes::ZExt))
           AssertOp = ISD::AssertZext;
 
         ArgValues.push_back(getCopyFromParts(DAG, dl, &InVals[i],
                                              NumParts, PartVT, VT,
-                                             AssertOp));
+                                             NULL, AssertOp));
       }
 
       i += NumParts;

@@ -17,7 +17,9 @@
 
 #include "llvm/Instructions.h"
 #include "llvm/BasicBlock.h"
+#include "llvm/DataLayout.h"
 #include "llvm/LLVMContext.h"
+#include "llvm/Operator.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
@@ -266,6 +268,10 @@ public:
     return Type::getInt8PtrTy(Context, AddrSpace);
   }
 
+  IntegerType* getIntPtrTy(DataLayout *DL, unsigned AddrSpace = 0) {
+    return DL->getIntPtrType(Context, AddrSpace);
+  }
+
   //===--------------------------------------------------------------------===//
   // Intrinsic creation methods
   //===--------------------------------------------------------------------===//
@@ -285,12 +291,15 @@ public:
   /// If the pointers aren't i8*, they will be converted.  If a TBAA tag is
   /// specified, it will be added to the instruction.
   CallInst *CreateMemCpy(Value *Dst, Value *Src, uint64_t Size, unsigned Align,
-                         bool isVolatile = false, MDNode *TBAATag = 0) {
-    return CreateMemCpy(Dst, Src, getInt64(Size), Align, isVolatile, TBAATag);
+                         bool isVolatile = false, MDNode *TBAATag = 0,
+                         MDNode *TBAAStructTag = 0) {
+    return CreateMemCpy(Dst, Src, getInt64(Size), Align, isVolatile, TBAATag,
+                        TBAAStructTag);
   }
 
   CallInst *CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align,
-                         bool isVolatile = false, MDNode *TBAATag = 0);
+                         bool isVolatile = false, MDNode *TBAATag = 0,
+                         MDNode *TBAAStructTag = 0);
 
   /// CreateMemMove - Create and insert a memmove between the specified
   /// pointers.  If the pointers aren't i8*, they will be converted.  If a TBAA
@@ -321,7 +330,10 @@ private:
 ///
 /// Note that the builder does not expose the full generality of LLVM
 /// instructions.  For access to extra instruction properties, use the mutators
-/// (e.g. setVolatile) on the instructions after they have been created.
+/// (e.g. setVolatile) on the instructions after they have been
+/// created. Convenience state exists to specify fast-math flags and fp-math
+/// tags.
+///
 /// The first template argument handles whether or not to preserve names in the
 /// final instruction output. This defaults to on.  The second template argument
 /// specifies a class to use for creating constants.  This defaults to creating
@@ -333,36 +345,40 @@ template<bool preserveNames = true, typename T = ConstantFolder,
 class IRBuilder : public IRBuilderBase, public Inserter {
   T Folder;
   MDNode *DefaultFPMathTag;
+  FastMathFlags FMF;
 public:
   IRBuilder(LLVMContext &C, const T &F, const Inserter &I = Inserter(),
             MDNode *FPMathTag = 0)
-    : IRBuilderBase(C), Inserter(I), Folder(F), DefaultFPMathTag(FPMathTag) {
+    : IRBuilderBase(C), Inserter(I), Folder(F), DefaultFPMathTag(FPMathTag),
+      FMF() {
   }
 
-  explicit IRBuilder(LLVMContext &C, MDNode *FPMathTag = 0) : IRBuilderBase(C),
-    Folder(), DefaultFPMathTag(FPMathTag) {
+  explicit IRBuilder(LLVMContext &C, MDNode *FPMathTag = 0)
+    : IRBuilderBase(C), Folder(), DefaultFPMathTag(FPMathTag), FMF() {
   }
 
   explicit IRBuilder(BasicBlock *TheBB, const T &F, MDNode *FPMathTag = 0)
     : IRBuilderBase(TheBB->getContext()), Folder(F),
-      DefaultFPMathTag(FPMathTag) {
+      DefaultFPMathTag(FPMathTag), FMF() {
     SetInsertPoint(TheBB);
   }
 
   explicit IRBuilder(BasicBlock *TheBB, MDNode *FPMathTag = 0)
     : IRBuilderBase(TheBB->getContext()), Folder(),
-      DefaultFPMathTag(FPMathTag) {
+      DefaultFPMathTag(FPMathTag), FMF() {
     SetInsertPoint(TheBB);
   }
 
   explicit IRBuilder(Instruction *IP, MDNode *FPMathTag = 0)
-    : IRBuilderBase(IP->getContext()), Folder(), DefaultFPMathTag(FPMathTag) {
+    : IRBuilderBase(IP->getContext()), Folder(), DefaultFPMathTag(FPMathTag),
+      FMF() {
     SetInsertPoint(IP);
     SetCurrentDebugLocation(IP->getDebugLoc());
   }
 
   explicit IRBuilder(Use &U, MDNode *FPMathTag = 0)
-    : IRBuilderBase(U->getContext()), Folder(), DefaultFPMathTag(FPMathTag) {
+    : IRBuilderBase(U->getContext()), Folder(), DefaultFPMathTag(FPMathTag),
+      FMF() {
     SetInsertPoint(U);
     SetCurrentDebugLocation(cast<Instruction>(U.getUser())->getDebugLoc());
   }
@@ -370,13 +386,13 @@ public:
   IRBuilder(BasicBlock *TheBB, BasicBlock::iterator IP, const T& F,
             MDNode *FPMathTag = 0)
     : IRBuilderBase(TheBB->getContext()), Folder(F),
-      DefaultFPMathTag(FPMathTag) {
+      DefaultFPMathTag(FPMathTag), FMF() {
     SetInsertPoint(TheBB, IP);
   }
 
   IRBuilder(BasicBlock *TheBB, BasicBlock::iterator IP, MDNode *FPMathTag = 0)
     : IRBuilderBase(TheBB->getContext()), Folder(),
-      DefaultFPMathTag(FPMathTag) {
+      DefaultFPMathTag(FPMathTag), FMF() {
     SetInsertPoint(TheBB, IP);
   }
 
@@ -386,8 +402,17 @@ public:
   /// getDefaultFPMathTag - Get the floating point math metadata being used.
   MDNode *getDefaultFPMathTag() const { return DefaultFPMathTag; }
 
+  /// Get the flags to be applied to created floating point ops
+  FastMathFlags getFastMathFlags() const { return FMF; }
+
+  /// Clear the fast-math flags.
+  void clearFastMathFlags() { FMF.clear(); }
+
   /// SetDefaultFPMathTag - Set the floating point math metadata to be used.
   void SetDefaultFPMathTag(MDNode *FPMathTag) { DefaultFPMathTag = FPMathTag; }
+
+  /// Set the fast-math flags to be used with generated fp-math operators
+  void SetFastMathFlags(FastMathFlags NewFMF) { FMF = NewFMF; }
 
   /// isNamePreserving - Return true if this builder is configured to actually
   /// add the requested names to IR created through it.
@@ -527,11 +552,14 @@ private:
     return BO;
   }
 
-  Instruction *AddFPMathTag(Instruction *I, MDNode *FPMathTag) const {
+  Instruction *AddFPMathAttributes(Instruction *I,
+                                   MDNode *FPMathTag,
+                                   FastMathFlags FMF) const {
     if (!FPMathTag)
       FPMathTag = DefaultFPMathTag;
     if (FPMathTag)
       I->setMetadata(LLVMContext::MD_fpmath, FPMathTag);
+    I->setFastMathFlags(FMF);
     return I;
   }
 public:
@@ -554,8 +582,8 @@ public:
     if (Constant *LC = dyn_cast<Constant>(LHS))
       if (Constant *RC = dyn_cast<Constant>(RHS))
         return Insert(Folder.CreateFAdd(LC, RC), Name);
-    return Insert(AddFPMathTag(BinaryOperator::CreateFAdd(LHS, RHS),
-                               FPMathTag), Name);
+    return Insert(AddFPMathAttributes(BinaryOperator::CreateFAdd(LHS, RHS),
+                                      FPMathTag, FMF), Name);
   }
   Value *CreateSub(Value *LHS, Value *RHS, const Twine &Name = "",
                    bool HasNUW = false, bool HasNSW = false) {
@@ -576,8 +604,8 @@ public:
     if (Constant *LC = dyn_cast<Constant>(LHS))
       if (Constant *RC = dyn_cast<Constant>(RHS))
         return Insert(Folder.CreateFSub(LC, RC), Name);
-    return Insert(AddFPMathTag(BinaryOperator::CreateFSub(LHS, RHS),
-                               FPMathTag), Name);
+    return Insert(AddFPMathAttributes(BinaryOperator::CreateFSub(LHS, RHS),
+                                      FPMathTag, FMF), Name);
   }
   Value *CreateMul(Value *LHS, Value *RHS, const Twine &Name = "",
                    bool HasNUW = false, bool HasNSW = false) {
@@ -598,8 +626,8 @@ public:
     if (Constant *LC = dyn_cast<Constant>(LHS))
       if (Constant *RC = dyn_cast<Constant>(RHS))
         return Insert(Folder.CreateFMul(LC, RC), Name);
-    return Insert(AddFPMathTag(BinaryOperator::CreateFMul(LHS, RHS),
-                               FPMathTag), Name);
+    return Insert(AddFPMathAttributes(BinaryOperator::CreateFMul(LHS, RHS),
+                                      FPMathTag, FMF), Name);
   }
   Value *CreateUDiv(Value *LHS, Value *RHS, const Twine &Name = "",
                     bool isExact = false) {
@@ -630,8 +658,8 @@ public:
     if (Constant *LC = dyn_cast<Constant>(LHS))
       if (Constant *RC = dyn_cast<Constant>(RHS))
         return Insert(Folder.CreateFDiv(LC, RC), Name);
-    return Insert(AddFPMathTag(BinaryOperator::CreateFDiv(LHS, RHS),
-                               FPMathTag), Name);
+    return Insert(AddFPMathAttributes(BinaryOperator::CreateFDiv(LHS, RHS),
+                                      FPMathTag, FMF), Name);
   }
   Value *CreateURem(Value *LHS, Value *RHS, const Twine &Name = "") {
     if (Constant *LC = dyn_cast<Constant>(LHS))
@@ -650,8 +678,8 @@ public:
     if (Constant *LC = dyn_cast<Constant>(LHS))
       if (Constant *RC = dyn_cast<Constant>(RHS))
         return Insert(Folder.CreateFRem(LC, RC), Name);
-    return Insert(AddFPMathTag(BinaryOperator::CreateFRem(LHS, RHS),
-                               FPMathTag), Name);
+    return Insert(AddFPMathAttributes(BinaryOperator::CreateFRem(LHS, RHS),
+                                      FPMathTag, FMF), Name);
   }
 
   Value *CreateShl(Value *LHS, Value *RHS, const Twine &Name = "",
@@ -780,7 +808,8 @@ public:
   Value *CreateFNeg(Value *V, const Twine &Name = "", MDNode *FPMathTag = 0) {
     if (Constant *VC = dyn_cast<Constant>(V))
       return Insert(Folder.CreateFNeg(VC), Name);
-    return Insert(AddFPMathTag(BinaryOperator::CreateFNeg(V), FPMathTag), Name);
+    return Insert(AddFPMathAttributes(BinaryOperator::CreateFNeg(V),
+                                      FPMathTag, FMF), Name);
   }
   Value *CreateNot(Value *V, const Twine &Name = "") {
     if (Constant *VC = dyn_cast<Constant>(V))
@@ -809,6 +838,31 @@ public:
   }
   StoreInst *CreateStore(Value *Val, Value *Ptr, bool isVolatile = false) {
     return Insert(new StoreInst(Val, Ptr, isVolatile));
+  }
+  // Provided to resolve 'CreateAlignedLoad(Ptr, Align, "...")' correctly,
+  // instead of converting the string to 'bool' for the isVolatile parameter.
+  LoadInst *CreateAlignedLoad(Value *Ptr, unsigned Align, const char *Name) {
+    LoadInst *LI = CreateLoad(Ptr, Name);
+    LI->setAlignment(Align);
+    return LI;
+  }
+  LoadInst *CreateAlignedLoad(Value *Ptr, unsigned Align,
+                              const Twine &Name = "") {
+    LoadInst *LI = CreateLoad(Ptr, Name);
+    LI->setAlignment(Align);
+    return LI;
+  }
+  LoadInst *CreateAlignedLoad(Value *Ptr, unsigned Align, bool isVolatile,
+                              const Twine &Name = "") {
+    LoadInst *LI = CreateLoad(Ptr, isVolatile, Name);
+    LI->setAlignment(Align);
+    return LI;
+  }
+  StoreInst *CreateAlignedStore(Value *Val, Value *Ptr, unsigned Align,
+                                bool isVolatile = false) {
+    StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
+    SI->setAlignment(Align);
+    return SI;
   }
   FenceInst *CreateFence(AtomicOrdering Ordering,
                          SynchronizationScope SynchScope = CrossThread) {
@@ -969,6 +1023,30 @@ public:
   }
   Value *CreateSExt(Value *V, Type *DestTy, const Twine &Name = "") {
     return CreateCast(Instruction::SExt, V, DestTy, Name);
+  }
+  /// CreateZExtOrTrunc - Create a ZExt or Trunc from the integer value V to
+  /// DestTy. Return the value untouched if the type of V is already DestTy.
+  Value *CreateZExtOrTrunc(Value *V, IntegerType *DestTy,
+                           const Twine &Name = "") {
+    assert(isa<IntegerType>(V->getType()) && "Can only zero extend integers!");
+    IntegerType *IntTy = cast<IntegerType>(V->getType());
+    if (IntTy->getBitWidth() < DestTy->getBitWidth())
+      return CreateZExt(V, DestTy, Name);
+    if (IntTy->getBitWidth() > DestTy->getBitWidth())
+      return CreateTrunc(V, DestTy, Name);
+    return V;
+  }
+  /// CreateSExtOrTrunc - Create a SExt or Trunc from the integer value V to
+  /// DestTy. Return the value untouched if the type of V is already DestTy.
+  Value *CreateSExtOrTrunc(Value *V, IntegerType *DestTy,
+                           const Twine &Name = "") {
+    assert(isa<IntegerType>(V->getType()) && "Can only sign extend integers!");
+    IntegerType *IntTy = cast<IntegerType>(V->getType());
+    if (IntTy->getBitWidth() < DestTy->getBitWidth())
+      return CreateSExt(V, DestTy, Name);
+    if (IntTy->getBitWidth() > DestTy->getBitWidth())
+      return CreateTrunc(V, DestTy, Name);
+    return V;
   }
   Value *CreateFPToUI(Value *V, Type *DestTy, const Twine &Name = ""){
     return CreateCast(Instruction::FPToUI, V, DestTy, Name);

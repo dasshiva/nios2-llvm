@@ -219,7 +219,6 @@ entry:
 ; by sbb, we should not optimize cmp away.
 define i32 @q(i32 %j.4, i32 %w, i32 %el) {
 ; CHECK: q:
-; CHECK: sub
 ; CHECK: cmp
 ; CHECK-NEXT: sbb
   %tmp532 = add i32 %j.4, %w
@@ -277,4 +276,32 @@ entry:
   %cmp = icmp sgt i32 %add, 0
   %cond = select i1 %cmp, i32 %add, i32 0
   ret i32 %cond
+}
+
+; PR13966
+@b = common global i32 0, align 4
+@a = common global i32 0, align 4
+define i32 @test1(i32 %p1) nounwind uwtable {
+entry:
+; CHECK: test1:
+; CHECK: testb
+; CHECK: j
+; CHECK: ret
+  %0 = load i32* @b, align 4
+  %cmp = icmp ult i32 %0, %p1
+  %conv = zext i1 %cmp to i32
+  %1 = load i32* @a, align 4
+  %and = and i32 %conv, %1
+  %conv1 = trunc i32 %and to i8
+  %2 = urem i8 %conv1, 3
+  %tobool = icmp eq i8 %2, 0
+  br i1 %tobool, label %if.end, label %if.then
+
+if.then:
+  %dec = add nsw i32 %1, -1
+  store i32 %dec, i32* @a, align 4
+  br label %if.end
+
+if.end:
+  ret i32 undef
 }

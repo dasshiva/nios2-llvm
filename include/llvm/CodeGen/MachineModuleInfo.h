@@ -180,7 +180,10 @@ public:
                     const MCObjectFileInfo *MOFI);
   ~MachineModuleInfo();
 
+  using ModulePass::doInitialization;
   bool doInitialization();
+
+  using ModulePass::doFinalization;
   bool doFinalization();
 
   /// EndFunction - Discard function meta information.
@@ -372,7 +375,7 @@ public:
 
   /// getCurrentCallSite - Get the call site currently being processed, if any.
   /// return zero if none.
-  unsigned getCurrentCallSite(void) { return CurCallSite; }
+  unsigned getCurrentCallSite() { return CurCallSite; }
 
   /// getTypeInfos - Return a reference to the C++ typeinfo for the current
   /// function.

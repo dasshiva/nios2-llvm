@@ -540,13 +540,13 @@ GlobalVariable *GCOVProfiler::buildEdgeLookupTable(
   // read it. Threads and invoke make this untrue.
 
   // emit [(succs * preds) x i64*], logically [succ x [pred x i64*]].
+  size_t TableSize = Succs.size() * Preds.size();
   Type *Int64PtrTy = Type::getInt64PtrTy(*Ctx);
-  ArrayType *EdgeTableTy = ArrayType::get(
-      Int64PtrTy, Succs.size() * Preds.size());
+  ArrayType *EdgeTableTy = ArrayType::get(Int64PtrTy, TableSize);
 
-  Constant **EdgeTable = new Constant*[Succs.size() * Preds.size()];
+  OwningArrayPtr<Constant *> EdgeTable(new Constant*[TableSize]);
   Constant *NullValue = Constant::getNullValue(Int64PtrTy);
-  for (int i = 0, ie = Succs.size() * Preds.size(); i != ie; ++i)
+  for (size_t i = 0; i != TableSize; ++i)
     EdgeTable[i] = NullValue;
 
   unsigned Edge = 0;
@@ -566,7 +566,7 @@ GlobalVariable *GCOVProfiler::buildEdgeLookupTable(
     Edge += Successors;
   }
 
-  ArrayRef<Constant*> V(&EdgeTable[0], Succs.size() * Preds.size());
+  ArrayRef<Constant*> V(&EdgeTable[0], TableSize);
   GlobalVariable *EdgeTableGV =
       new GlobalVariable(
           *M, EdgeTableTy, true, GlobalValue::InternalLinkage,
@@ -682,7 +682,7 @@ void GCOVProfiler::insertCounterWriteout(
                                  "__llvm_gcov_init", M);
   F->setUnnamedAddr(true);
   F->setLinkage(GlobalValue::InternalLinkage);
-  F->addFnAttr(Attribute::NoInline);
+  F->addFnAttr(Attributes::NoInline);
 
   BB = BasicBlock::Create(*Ctx, "entry", F);
   Builder.SetInsertPoint(BB);
@@ -701,7 +701,7 @@ void GCOVProfiler::insertIndirectCounterIncrement() {
     cast<Function>(GCOVProfiler::getIncrementIndirectCounterFunc());
   Fn->setUnnamedAddr(true);
   Fn->setLinkage(GlobalValue::InternalLinkage);
-  Fn->addFnAttr(Attribute::NoInline);
+  Fn->addFnAttr(Attributes::NoInline);
 
   Type *Int32Ty = Type::getInt32Ty(*Ctx);
   Type *Int64Ty = Type::getInt64Ty(*Ctx);

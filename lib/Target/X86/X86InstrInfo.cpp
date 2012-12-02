@@ -561,6 +561,16 @@ X86InstrInfo::X86InstrInfo(X86TargetMachine &tm)
     { X86::VSQRTPSYr_Int,   X86::VSQRTPSYm_Int,       TB_ALIGN_32 },
     { X86::VBROADCASTSSYrr, X86::VBROADCASTSSYrm,     TB_NO_REVERSE },
     { X86::VBROADCASTSDYrr, X86::VBROADCASTSDYrm,     TB_NO_REVERSE },
+
+    // BMI/BMI2 foldable instructions
+    { X86::RORX32ri,        X86::RORX32mi,            0 },
+    { X86::RORX64ri,        X86::RORX64mi,            0 },
+    { X86::SARX32rr,        X86::SARX32rm,            0 },
+    { X86::SARX64rr,        X86::SARX64rm,            0 },
+    { X86::SHRX32rr,        X86::SHRX32rm,            0 },
+    { X86::SHRX64rr,        X86::SHRX64rm,            0 },
+    { X86::SHLX32rr,        X86::SHLX32rm,            0 },
+    { X86::SHLX64rr,        X86::SHLX64rm,            0 },
   };
 
   for (unsigned i = 0, e = array_lengthof(OpTbl1); i != e; ++i) {
@@ -1112,22 +1122,26 @@ X86InstrInfo::X86InstrInfo(X86TargetMachine &tm)
     // FIXME: add AVX 256-bit foldable instructions
 
     // FMA4 foldable patterns
-    { X86::VFMADDSS4rr,       X86::VFMADDSS4mr,        TB_ALIGN_16 },
-    { X86::VFMADDSD4rr,       X86::VFMADDSD4mr,        TB_ALIGN_16 },
+    { X86::VFMADDSS4rr,       X86::VFMADDSS4mr,        0           },
+    { X86::VFMADDSD4rr,       X86::VFMADDSD4mr,        0           },
     { X86::VFMADDPS4rr,       X86::VFMADDPS4mr,        TB_ALIGN_16 },
     { X86::VFMADDPD4rr,       X86::VFMADDPD4mr,        TB_ALIGN_16 },
     { X86::VFMADDPS4rrY,      X86::VFMADDPS4mrY,       TB_ALIGN_32 },
     { X86::VFMADDPD4rrY,      X86::VFMADDPD4mrY,       TB_ALIGN_32 },
+    { X86::VFNMADDSS4rr,      X86::VFNMADDSS4mr,       0           },
+    { X86::VFNMADDSD4rr,      X86::VFNMADDSD4mr,       0           },
     { X86::VFNMADDPS4rr,      X86::VFNMADDPS4mr,       TB_ALIGN_16 },
     { X86::VFNMADDPD4rr,      X86::VFNMADDPD4mr,       TB_ALIGN_16 },
     { X86::VFNMADDPS4rrY,     X86::VFNMADDPS4mrY,      TB_ALIGN_32 },
     { X86::VFNMADDPD4rrY,     X86::VFNMADDPD4mrY,      TB_ALIGN_32 },
-    { X86::VFMSUBSS4rr,       X86::VFMSUBSS4mr,        TB_ALIGN_16 },
-    { X86::VFMSUBSD4rr,       X86::VFMSUBSD4mr,        TB_ALIGN_16 },
+    { X86::VFMSUBSS4rr,       X86::VFMSUBSS4mr,        0           },
+    { X86::VFMSUBSD4rr,       X86::VFMSUBSD4mr,        0           },
     { X86::VFMSUBPS4rr,       X86::VFMSUBPS4mr,        TB_ALIGN_16 },
     { X86::VFMSUBPD4rr,       X86::VFMSUBPD4mr,        TB_ALIGN_16 },
     { X86::VFMSUBPS4rrY,      X86::VFMSUBPS4mrY,       TB_ALIGN_32 },
     { X86::VFMSUBPD4rrY,      X86::VFMSUBPD4mrY,       TB_ALIGN_32 },
+    { X86::VFNMSUBSS4rr,      X86::VFNMSUBSS4mr,       0           },
+    { X86::VFNMSUBSD4rr,      X86::VFNMSUBSD4mr,       0           },
     { X86::VFNMSUBPS4rr,      X86::VFNMSUBPS4mr,       TB_ALIGN_16 },
     { X86::VFNMSUBPD4rr,      X86::VFNMSUBPD4mr,       TB_ALIGN_16 },
     { X86::VFNMSUBPS4rrY,     X86::VFNMSUBPS4mrY,      TB_ALIGN_32 },
@@ -1140,6 +1154,10 @@ X86InstrInfo::X86InstrInfo(X86TargetMachine &tm)
     { X86::VFMSUBADDPD4rr,    X86::VFMSUBADDPD4mr,     TB_ALIGN_16 },
     { X86::VFMSUBADDPS4rrY,   X86::VFMSUBADDPS4mrY,    TB_ALIGN_32 },
     { X86::VFMSUBADDPD4rrY,   X86::VFMSUBADDPD4mrY,    TB_ALIGN_32 },
+
+    // BMI/BMI2 foldable instructions
+    { X86::MULX32rr,          X86::MULX32rm,            0 },
+    { X86::MULX64rr,          X86::MULX64rm,            0 },
   };
 
   for (unsigned i = 0, e = array_lengthof(OpTbl2); i != e; ++i) {
@@ -1269,22 +1287,26 @@ X86InstrInfo::X86InstrInfo(X86TargetMachine &tm)
     { X86::VFMSUBADDPDr213rY,     X86::VFMSUBADDPDr213mY,     TB_ALIGN_32 },
 
     // FMA4 foldable patterns
-    { X86::VFMADDSS4rr,           X86::VFMADDSS4rm,           TB_ALIGN_16 },
-    { X86::VFMADDSD4rr,           X86::VFMADDSD4rm,           TB_ALIGN_16 },
+    { X86::VFMADDSS4rr,           X86::VFMADDSS4rm,           0           },
+    { X86::VFMADDSD4rr,           X86::VFMADDSD4rm,           0           },
     { X86::VFMADDPS4rr,           X86::VFMADDPS4rm,           TB_ALIGN_16 },
     { X86::VFMADDPD4rr,           X86::VFMADDPD4rm,           TB_ALIGN_16 },
     { X86::VFMADDPS4rrY,          X86::VFMADDPS4rmY,          TB_ALIGN_32 },
     { X86::VFMADDPD4rrY,          X86::VFMADDPD4rmY,          TB_ALIGN_32 },
+    { X86::VFNMADDSS4rr,          X86::VFNMADDSS4rm,          0           },
+    { X86::VFNMADDSD4rr,          X86::VFNMADDSD4rm,          0           },
     { X86::VFNMADDPS4rr,          X86::VFNMADDPS4rm,          TB_ALIGN_16 },
     { X86::VFNMADDPD4rr,          X86::VFNMADDPD4rm,          TB_ALIGN_16 },
     { X86::VFNMADDPS4rrY,         X86::VFNMADDPS4rmY,         TB_ALIGN_32 },
     { X86::VFNMADDPD4rrY,         X86::VFNMADDPD4rmY,         TB_ALIGN_32 },
-    { X86::VFMSUBSS4rr,           X86::VFMSUBSS4rm,           TB_ALIGN_16 },
-    { X86::VFMSUBSD4rr,           X86::VFMSUBSD4rm,           TB_ALIGN_16 },
+    { X86::VFMSUBSS4rr,           X86::VFMSUBSS4rm,           0           },
+    { X86::VFMSUBSD4rr,           X86::VFMSUBSD4rm,           0           },
     { X86::VFMSUBPS4rr,           X86::VFMSUBPS4rm,           TB_ALIGN_16 },
     { X86::VFMSUBPD4rr,           X86::VFMSUBPD4rm,           TB_ALIGN_16 },
     { X86::VFMSUBPS4rrY,          X86::VFMSUBPS4rmY,          TB_ALIGN_32 },
     { X86::VFMSUBPD4rrY,          X86::VFMSUBPD4rmY,          TB_ALIGN_32 },
+    { X86::VFNMSUBSS4rr,          X86::VFNMSUBSS4rm,          0           },
+    { X86::VFNMSUBSD4rr,          X86::VFNMSUBSD4rm,          0           },
     { X86::VFNMSUBPS4rr,          X86::VFNMSUBPS4rm,          TB_ALIGN_16 },
     { X86::VFNMSUBPD4rr,          X86::VFNMSUBPD4rm,          TB_ALIGN_16 },
     { X86::VFNMSUBPS4rrY,         X86::VFNMSUBPS4rmY,         TB_ALIGN_32 },
@@ -2137,7 +2159,7 @@ X86InstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI) const {
     }
     MI->setDesc(get(Opc));
     MI->getOperand(3).setImm(Size-Amt);
-    return TargetInstrInfoImpl::commuteInstruction(MI, NewMI);
+    return TargetInstrInfo::commuteInstruction(MI, NewMI);
   }
   case X86::CMOVB16rr:  case X86::CMOVB32rr:  case X86::CMOVB64rr:
   case X86::CMOVAE16rr: case X86::CMOVAE32rr: case X86::CMOVAE64rr:
@@ -2216,7 +2238,7 @@ X86InstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI) const {
     // Fallthrough intended.
   }
   default:
-    return TargetInstrInfoImpl::commuteInstruction(MI, NewMI);
+    return TargetInstrInfo::commuteInstruction(MI, NewMI);
   }
 }
 
@@ -2266,7 +2288,7 @@ static X86::CondCode getCondFromSETOpc(unsigned Opc) {
 }
 
 /// getCondFromCmovOpc - return condition code of a CMov opcode.
-static X86::CondCode getCondFromCMovOpc(unsigned Opc) {
+X86::CondCode X86::getCondFromCMovOpc(unsigned Opc) {
   switch (Opc) {
   default: return X86::COND_INVALID;
   case X86::CMOVA16rm:  case X86::CMOVA16rr:  case X86::CMOVA32rm:
@@ -3314,7 +3336,7 @@ optimizeCompareInstr(MachineInstr *CmpInstr, unsigned SrcReg, unsigned SrcReg2,
         if (OldCC != X86::COND_INVALID)
           OpcIsSET = true;
         else
-          OldCC = getCondFromCMovOpc(Instr.getOpcode());
+          OldCC = X86::getCondFromCMovOpc(Instr.getOpcode());
       }
       if (OldCC == X86::COND_INVALID) return false;
     }
@@ -3495,6 +3517,14 @@ static bool Expand2AddrUndef(MachineInstr *MI, const MCInstrDesc &Desc) {
 bool X86InstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const {
   bool HasAVX = TM.getSubtarget<X86Subtarget>().hasAVX();
   switch (MI->getOpcode()) {
+  case X86::SETB_C8r:
+    return Expand2AddrUndef(MI, get(X86::SBB8rr));
+  case X86::SETB_C16r:
+    return Expand2AddrUndef(MI, get(X86::SBB16rr));
+  case X86::SETB_C32r:
+    return Expand2AddrUndef(MI, get(X86::SBB32rr));
+  case X86::SETB_C64r:
+    return Expand2AddrUndef(MI, get(X86::SBB64rr));
   case X86::V_SET0:
   case X86::FsFLD0SS:
   case X86::FsFLD0SD:
@@ -3806,7 +3836,8 @@ MachineInstr* X86InstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
 
   // Unless optimizing for size, don't fold to avoid partial
   // register update stalls
-  if (!MF.getFunction()->hasFnAttr(Attribute::OptimizeForSize) &&
+  if (!MF.getFunction()->getFnAttributes().
+        hasAttribute(Attributes::OptimizeForSize) &&
       hasPartialRegUpdate(MI->getOpcode()))
     return 0;
 
@@ -3847,7 +3878,8 @@ MachineInstr* X86InstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
 
   // Unless optimizing for size, don't fold to avoid partial
   // register update stalls
-  if (!MF.getFunction()->hasFnAttr(Attribute::OptimizeForSize) &&
+  if (!MF.getFunction()->getFnAttributes().
+        hasAttribute(Attributes::OptimizeForSize) &&
       hasPartialRegUpdate(MI->getOpcode()))
     return 0;
 
@@ -3950,6 +3982,21 @@ MachineInstr* X86InstrInfo::foldMemoryOperandImpl(MachineFunction &MF,
     break;
   }
   default: {
+    if ((LoadMI->getOpcode() == X86::MOVSSrm ||
+         LoadMI->getOpcode() == X86::VMOVSSrm) &&
+        MF.getRegInfo().getRegClass(LoadMI->getOperand(0).getReg())->getSize()
+          > 4)
+      // These instructions only load 32 bits, we can't fold them if the
+      // destination register is wider than 32 bits (4 bytes).
+      return NULL;
+    if ((LoadMI->getOpcode() == X86::MOVSDrm ||
+         LoadMI->getOpcode() == X86::VMOVSDrm) &&
+        MF.getRegInfo().getRegClass(LoadMI->getOperand(0).getReg())->getSize()
+          > 8)
+      // These instructions only load 64 bits, we can't fold them if the
+      // destination register is wider than 64 bits (8 bytes).
+      return NULL;
+
     // Folding a normal load. Just copy the load's address operands.
     unsigned NumOps = LoadMI->getDesc().getNumOperands();
     for (unsigned i = NumOps - X86::AddrNumOperands; i != NumOps; ++i)
@@ -4017,7 +4064,7 @@ bool X86InstrInfo::canFoldMemoryOperand(const MachineInstr *MI,
 
   if (OpcodeTablePtr && OpcodeTablePtr->count(Opc))
     return true;
-  return TargetInstrInfoImpl::canFoldMemoryOperand(MI, Ops);
+  return TargetInstrInfo::canFoldMemoryOperand(MI, Ops);
 }
 
 bool X86InstrInfo::unfoldMemoryOperand(MachineFunction &MF, MachineInstr *MI,

@@ -226,6 +226,8 @@ public:
   virtual void EmitCFIRelOffset(int64_t Register, int64_t Offset);
   virtual void EmitCFIAdjustCfaOffset(int64_t Adjustment);
   virtual void EmitCFISignalFrame();
+  virtual void EmitCFIUndefined(int64_t Register);
+  virtual void EmitCFIRegister(int64_t Register1, int64_t Register2);
 
   virtual void EmitWin64EHStartProc(const MCSymbol *Symbol);
   virtual void EmitWin64EHEndProc();
@@ -251,6 +253,7 @@ public:
   virtual void EmitPad(int64_t Offset);
   virtual void EmitRegSave(const SmallVectorImpl<unsigned> &RegList, bool);
 
+  virtual void EmitTCEntry(const MCSymbol &S);
 
   virtual void EmitInstruction(const MCInst &Inst);
 
@@ -1035,6 +1038,26 @@ void MCAsmStreamer::EmitCFISignalFrame() {
   EmitEOL();
 }
 
+void MCAsmStreamer::EmitCFIUndefined(int64_t Register) {
+  MCStreamer::EmitCFIUndefined(Register);
+
+  if (!UseCFI)
+    return;
+
+  OS << "\t.cfi_undefined " << Register;
+  EmitEOL();
+}
+
+void MCAsmStreamer::EmitCFIRegister(int64_t Register1, int64_t Register2) {
+  MCStreamer::EmitCFIRegister(Register1, Register2);
+
+  if (!UseCFI)
+    return;
+
+  OS << "\t.cfi_register " << Register1 << ", " << Register2;
+  EmitEOL();
+}
+
 void MCAsmStreamer::EmitWin64EHStartProc(const MCSymbol *Symbol) {
   MCStreamer::EmitWin64EHStartProc(Symbol);
 
@@ -1296,6 +1319,14 @@ void MCAsmStreamer::EmitRegSave(const SmallVectorImpl<unsigned> &RegList,
   }
 
   OS << "}";
+  EmitEOL();
+}
+
+void MCAsmStreamer::EmitTCEntry(const MCSymbol &S) {
+  OS << "\t.tc ";
+  OS << S.getName();
+  OS << "[TC],";
+  OS << S.getName();
   EmitEOL();
 }
 

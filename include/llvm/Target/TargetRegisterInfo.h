@@ -34,8 +34,8 @@ class raw_ostream;
 
 class TargetRegisterClass {
 public:
-  typedef const uint16_t* iterator;
-  typedef const uint16_t* const_iterator;
+  typedef const MCPhysReg* iterator;
+  typedef const MCPhysReg* const_iterator;
   typedef const MVT::SimpleValueType* vt_iterator;
   typedef const TargetRegisterClass* const * sc_iterator;
 
@@ -45,7 +45,7 @@ public:
   const uint32_t *SubClassMask;
   const uint16_t *SuperRegIndices;
   const sc_iterator SuperClasses;
-  ArrayRef<uint16_t> (*OrderFunc)(const MachineFunction&);
+  ArrayRef<MCPhysReg> (*OrderFunc)(const MachineFunction&);
 
   /// getID() - Return the register class ID number.
   ///
@@ -190,7 +190,7 @@ public:
   ///
   /// By default, this method returns all registers in the class.
   ///
-  ArrayRef<uint16_t> getRawAllocationOrder(const MachineFunction &MF) const {
+  ArrayRef<MCPhysReg> getRawAllocationOrder(const MachineFunction &MF) const {
     return OrderFunc ? OrderFunc(MF) : makeArrayRef(begin(), getNumRegs());
   }
 };
@@ -407,7 +407,7 @@ public:
   /// order of desired callee-save stack frame offset. The first register is
   /// closest to the incoming stack pointer if stack grows down, and vice versa.
   ///
-  virtual const uint16_t* getCalleeSavedRegs(const MachineFunction *MF = 0)
+  virtual const MCPhysReg* getCalleeSavedRegs(const MachineFunction *MF = 0)
                                                                       const = 0;
 
   /// getCallPreservedMask - Return a mask of call-preserved registers for the
@@ -446,18 +446,6 @@ public:
     return MCRegisterInfo::getMatchingSuperReg(Reg, SubIdx, RC->MC);
   }
 
-  /// canCombineSubRegIndices - Given a register class and a list of
-  /// subregister indices, return true if it's possible to combine the
-  /// subregister indices into one that corresponds to a larger
-  /// subregister. Return the new subregister index by reference. Note the
-  /// new index may be zero if the given subregisters can be combined to
-  /// form the whole register.
-  virtual bool canCombineSubRegIndices(const TargetRegisterClass *RC,
-                                       SmallVectorImpl<unsigned> &SubIndices,
-                                       unsigned &NewSubIdx) const {
-    return 0;
-  }
-
   /// getMatchingSuperRegClass - Return a subclass of the specified register
   /// class A so that each register in it has a sub-register of the
   /// specified sub-register index which is in the specified register class B.
@@ -488,6 +476,8 @@ public:
   /// composeSubRegIndices - Return the subregister index you get from composing
   /// two subregister indices.
   ///
+  /// The special null sub-register index composes as the identity.
+  ///
   /// If R:a:b is the same register as R:c, then composeSubRegIndices(a, b)
   /// returns c. Note that composeSubRegIndices does not tell you about illegal
   /// compositions. If R does not have a subreg a, or R:a does not have a subreg
@@ -497,11 +487,19 @@ public:
   /// ssub_0:S0 - ssub_3:S3 subregs.
   /// If you compose subreg indices dsub_1, ssub_0 you get ssub_2.
   ///
-  virtual unsigned composeSubRegIndices(unsigned a, unsigned b) const {
-    // This default implementation is correct for most targets.
-    return b;
+  unsigned composeSubRegIndices(unsigned a, unsigned b) const {
+    if (!a) return b;
+    if (!b) return a;
+    return composeSubRegIndicesImpl(a, b);
   }
 
+protected:
+  /// Overridden by TableGen in targets that have sub-registers.
+  virtual unsigned composeSubRegIndicesImpl(unsigned, unsigned) const {
+    llvm_unreachable("Target has no sub-registers");
+  }
+
+public:
   /// getCommonSuperRegClass - Find a common super-register class if it exists.
   ///
   /// Find a register class, SuperRC and two sub-register indices, PreA and
@@ -621,7 +619,7 @@ public:
   ///
   /// Register allocators need only call this function to resolve
   /// target-dependent hints, but it should work without hinting as well.
-  virtual ArrayRef<uint16_t>
+  virtual ArrayRef<MCPhysReg>
   getRawAllocationOrder(const TargetRegisterClass *RC,
                         unsigned HintType, unsigned HintReg,
                         const MachineFunction &MF) const {
@@ -878,7 +876,8 @@ class PrintReg {
   unsigned Reg;
   unsigned SubIdx;
 public:
-  PrintReg(unsigned reg, const TargetRegisterInfo *tri = 0, unsigned subidx = 0)
+  explicit PrintReg(unsigned reg, const TargetRegisterInfo *tri = 0,
+                    unsigned subidx = 0)
     : TRI(tri), Reg(reg), SubIdx(subidx) {}
   void print(raw_ostream&) const;
 };

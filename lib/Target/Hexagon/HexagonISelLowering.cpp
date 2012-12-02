@@ -608,7 +608,7 @@ static bool getIndexedAddressParts(SDNode *Ptr, EVT VT,
 
 // TODO: Put this function along with the other isS* functions in
 // HexagonISelDAGToDAG.cpp into a common file. Or better still, use the
-// functions defined in HexagonImmediates.td.
+// functions defined in HexagonOperands.td.
 static bool Is_PostInc_S4_Offset(SDNode * S, int ShiftAmount) {
   ConstantSDNode *N = cast<ConstantSDNode>(S);
 
@@ -1350,6 +1350,8 @@ HexagonTargetLowering::HexagonTargetLowering(HexagonTargetMachine
     } else {
       setOperationAction(ISD::BR_JT, MVT::Other, Expand);
     }
+    // Increase jump tables cutover to 5, was 4.
+    setMinimumJumpTableEntries(5);
 
     setOperationAction(ISD::BR_CC, MVT::i32, Expand);
 

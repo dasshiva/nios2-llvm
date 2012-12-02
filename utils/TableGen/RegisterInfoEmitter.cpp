@@ -62,6 +62,8 @@ private:
 
   void EmitRegUnitPressure(raw_ostream &OS, const CodeGenRegBank &RegBank,
                            const std::string &ClassName);
+  void emitComposeSubRegIndices(raw_ostream &OS, CodeGenRegBank &RegBank,
+                                const std::string &ClassName);
 };
 } // End anonymous namespace
 
@@ -325,7 +327,7 @@ RegisterInfoEmitter::EmitRegMappingTables(raw_ostream &OS,
     if (!V || !V->getValue())
       continue;
 
-    DefInit *DI = dynamic_cast<DefInit*>(V->getValue());
+    DefInit *DI = cast<DefInit>(V->getValue());
     Record *Alias = DI->getDef();
     DwarfRegNums[Reg] = DwarfRegNums[Alias];
   }
@@ -530,6 +532,102 @@ static void printDiff16(raw_ostream &OS, uint16_t Val) {
   OS << Val;
 }
 
+// Try to combine Idx's compose map into Vec if it is compatible.
+// Return false if it's not possible.
+static bool combine(const CodeGenSubRegIndex *Idx,
+                    SmallVectorImpl<CodeGenSubRegIndex*> &Vec) {
+  const CodeGenSubRegIndex::CompMap &Map = Idx->getComposites();
+  for (CodeGenSubRegIndex::CompMap::const_iterator
+       I = Map.begin(), E = Map.end(); I != E; ++I) {
+    CodeGenSubRegIndex *&Entry = Vec[I->first->EnumValue - 1];
+    if (Entry && Entry != I->second)
+      return false;
+  }
+
+  // All entries are compatible. Make it so.
+  for (CodeGenSubRegIndex::CompMap::const_iterator
+       I = Map.begin(), E = Map.end(); I != E; ++I)
+    Vec[I->first->EnumValue - 1] = I->second;
+  return true;
+}
+
+static const char *getMinimalTypeForRange(uint64_t Range) {
+  assert(Range < 0xFFFFFFFFULL && "Enum too large");
+  if (Range > 0xFFFF)
+    return "uint32_t";
+  if (Range > 0xFF)
+    return "uint16_t";
+  return "uint8_t";
+}
+
+void
+RegisterInfoEmitter::emitComposeSubRegIndices(raw_ostream &OS,
+                                              CodeGenRegBank &RegBank,
+                                              const std::string &ClName) {
+  ArrayRef<CodeGenSubRegIndex*> SubRegIndices = RegBank.getSubRegIndices();
+  OS << "unsigned " << ClName
+     << "::composeSubRegIndicesImpl(unsigned IdxA, unsigned IdxB) const {\n";
+
+  // Many sub-register indexes are composition-compatible, meaning that
+  //
+  //   compose(IdxA, IdxB) == compose(IdxA', IdxB)
+  //
+  // for many IdxA, IdxA' pairs. Not all sub-register indexes can be composed.
+  // The illegal entries can be use as wildcards to compress the table further.
+
+  // Map each Sub-register index to a compatible table row.
+  SmallVector<unsigned, 4> RowMap;
+  SmallVector<SmallVector<CodeGenSubRegIndex*, 4>, 4> Rows;
+
+  for (unsigned i = 0, e = SubRegIndices.size(); i != e; ++i) {
+    unsigned Found = ~0u;
+    for (unsigned r = 0, re = Rows.size(); r != re; ++r) {
+      if (combine(SubRegIndices[i], Rows[r])) {
+        Found = r;
+        break;
+      }
+    }
+    if (Found == ~0u) {
+      Found = Rows.size();
+      Rows.resize(Found + 1);
+      Rows.back().resize(SubRegIndices.size());
+      combine(SubRegIndices[i], Rows.back());
+    }
+    RowMap.push_back(Found);
+  }
+
+  // Output the row map if there is multiple rows.
+  if (Rows.size() > 1) {
+    OS << "  static const " << getMinimalTypeForRange(Rows.size())
+       << " RowMap[" << SubRegIndices.size() << "] = {\n    ";
+    for (unsigned i = 0, e = SubRegIndices.size(); i != e; ++i)
+      OS << RowMap[i] << ", ";
+    OS << "\n  };\n";
+  }
+
+  // Output the rows.
+  OS << "  static const " << getMinimalTypeForRange(SubRegIndices.size()+1)
+     << " Rows[" << Rows.size() << "][" << SubRegIndices.size() << "] = {\n";
+  for (unsigned r = 0, re = Rows.size(); r != re; ++r) {
+    OS << "    { ";
+    for (unsigned i = 0, e = SubRegIndices.size(); i != e; ++i)
+      if (Rows[r][i])
+        OS << Rows[r][i]->EnumValue << ", ";
+      else
+        OS << "0, ";
+    OS << "},\n";
+  }
+  OS << "  };\n\n";
+
+  OS << "  --IdxA; assert(IdxA < " << SubRegIndices.size() << ");\n"
+     << "  --IdxB; assert(IdxB < " << SubRegIndices.size() << ");\n";
+  if (Rows.size() > 1)
+    OS << "  return Rows[RowMap[IdxA]][IdxB];\n";
+  else
+    OS << "  return Rows[0][IdxB];\n";
+  OS << "}\n\n";
+}
+
 //
 // runMCDesc - Print out MC register descriptions.
 //
@@ -631,7 +729,7 @@ RegisterInfoEmitter::runMCDesc(raw_ostream &OS, CodeGenTarget &Target,
   const std::string &TargetName = Target.getName();
 
   // Emit the shared table of differential lists.
-  OS << "extern const uint16_t " << TargetName << "RegDiffLists[] = {\n";
+  OS << "extern const MCPhysReg " << TargetName << "RegDiffLists[] = {\n";
   DiffSeqs.emit(OS, printDiff16);
   OS << "};\n\n";
 
@@ -751,7 +849,7 @@ RegisterInfoEmitter::runMCDesc(raw_ostream &OS, CodeGenTarget &Target,
     BitsInit *BI = Reg->getValueAsBitsInit("HWEncoding");
     uint64_t Value = 0;
     for (unsigned b = 0, be = BI->getNumBits(); b != be; ++b) {
-      if (BitInit *B = dynamic_cast<BitInit*>(BI->getBit(b)))
+      if (BitInit *B = dyn_cast<BitInit>(BI->getBit(b)))
       Value |= (uint64_t)B->getValue() << b;
     }
     OS << "  " << Value << ",\n";
@@ -802,7 +900,8 @@ RegisterInfoEmitter::runTargetHeader(raw_ostream &OS, CodeGenTarget &Target,
      << "  virtual bool needsStackRealignment(const MachineFunction &) const\n"
      << "     { return false; }\n";
   if (!RegBank.getSubRegIndices().empty()) {
-    OS << "  virtual unsigned composeSubRegIndices(unsigned, unsigned) const;\n"
+    OS << "  virtual unsigned composeSubRegIndicesImpl"
+       << "(unsigned, unsigned) const;\n"
       << "  virtual const TargetRegisterClass *"
       "getSubClassWithSubReg(const TargetRegisterClass*, unsigned) const;\n";
   }
@@ -975,12 +1074,12 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
         OS << "\nstatic inline unsigned " << RC.getName()
            << "AltOrderSelect(const MachineFunction &MF) {"
            << RC.AltOrderSelect << "}\n\n"
-           << "static ArrayRef<uint16_t> " << RC.getName()
+           << "static ArrayRef<MCPhysReg> " << RC.getName()
            << "GetRawAllocationOrder(const MachineFunction &MF) {\n";
         for (unsigned oi = 1 , oe = RC.getNumOrders(); oi != oe; ++oi) {
           ArrayRef<Record*> Elems = RC.getOrder(oi);
           if (!Elems.empty()) {
-            OS << "  static const uint16_t AltOrder" << oi << "[] = {";
+            OS << "  static const MCPhysReg AltOrder" << oi << "[] = {";
             for (unsigned elem = 0; elem != Elems.size(); ++elem)
               OS << (elem ? ", " : " ") << getQualifiedName(Elems[elem]);
             OS << " };\n";
@@ -988,11 +1087,11 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
         }
         OS << "  const MCRegisterClass &MCR = " << Target.getName()
            << "MCRegisterClasses[" << RC.getQualifiedName() + "RegClassID];\n"
-           << "  const ArrayRef<uint16_t> Order[] = {\n"
+           << "  const ArrayRef<MCPhysReg> Order[] = {\n"
            << "    makeArrayRef(MCR.begin(), MCR.getNumRegs()";
         for (unsigned oi = 1, oe = RC.getNumOrders(); oi != oe; ++oi)
           if (RC.getOrder(oi).empty())
-            OS << "),\n    ArrayRef<uint16_t>(";
+            OS << "),\n    ArrayRef<MCPhysReg>(";
           else
             OS << "),\n    makeArrayRef(AltOrder" << oi;
         OS << ")\n  };\n  const unsigned Select = " << RC.getName()
@@ -1054,31 +1153,8 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
 
   std::string ClassName = Target.getName() + "GenRegisterInfo";
 
-  // Emit composeSubRegIndices
-  if (!SubRegIndices.empty()) {
-    OS << "unsigned " << ClassName
-      << "::composeSubRegIndices(unsigned IdxA, unsigned IdxB) const {\n"
-      << "  switch (IdxA) {\n"
-      << "  default:\n    return IdxB;\n";
-    for (unsigned i = 0, e = SubRegIndices.size(); i != e; ++i) {
-      bool Open = false;
-      for (unsigned j = 0; j != e; ++j) {
-        CodeGenSubRegIndex *Comp = SubRegIndices[i]->compose(SubRegIndices[j]);
-        if (Comp && Comp != SubRegIndices[j]) {
-          if (!Open) {
-            OS << "  case " << SubRegIndices[i]->getQualifiedName()
-              << ": switch(IdxB) {\n    default: return IdxB;\n";
-            Open = true;
-          }
-          OS << "    case " << SubRegIndices[j]->getQualifiedName()
-            << ": return " << Comp->getQualifiedName() << ";\n";
-        }
-      }
-      if (Open)
-        OS << "    }\n";
-    }
-    OS << "  }\n}\n\n";
-  }
+  if (!SubRegIndices.empty())
+    emitComposeSubRegIndices(OS, RegBank, ClassName);
 
   // Emit getSubClassWithSubReg.
   if (!SubRegIndices.empty()) {
@@ -1092,7 +1168,7 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
     else if (RegisterClasses.size() < UINT16_MAX)
       OS << "  static const uint16_t Table[";
     else
-      throw "Too many register classes.";
+      PrintFatalError("Too many register classes.");
     OS << RegisterClasses.size() << "][" << SubRegIndices.size() << "] = {\n";
     for (unsigned rci = 0, rce = RegisterClasses.size(); rci != rce; ++rci) {
       const CodeGenRegisterClass &RC = *RegisterClasses[rci];
@@ -1118,7 +1194,7 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
 
   // Emit the constructor of the class...
   OS << "extern const MCRegisterDesc " << TargetName << "RegDesc[];\n";
-  OS << "extern const uint16_t " << TargetName << "RegDiffLists[];\n";
+  OS << "extern const MCPhysReg " << TargetName << "RegDiffLists[];\n";
   OS << "extern const char " << TargetName << "RegStrings[];\n";
   OS << "extern const uint16_t " << TargetName << "RegUnitRoots[][2];\n";
   OS << "extern const uint16_t " << TargetName << "SubRegIdxLists[];\n";
@@ -1156,7 +1232,7 @@ RegisterInfoEmitter::runTargetDesc(raw_ostream &OS, CodeGenTarget &Target,
     assert(Regs && "Cannot expand CalleeSavedRegs instance");
 
     // Emit the *_SaveList list of callee-saved registers.
-    OS << "static const uint16_t " << CSRSet->getName()
+    OS << "static const MCPhysReg " << CSRSet->getName()
        << "_SaveList[] = { ";
     for (unsigned r = 0, re = Regs->size(); r != re; ++r)
       OS << getQualifiedName((*Regs)[r]) << ", ";

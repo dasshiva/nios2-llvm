@@ -198,7 +198,7 @@ public:
     return FindAndConstruct(Key).second;
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   value_type& FindAndConstruct(KeyT &&Key) {
     BucketT *TheBucket;
     if (LookupBucketFor(Key, TheBucket))
@@ -383,7 +383,7 @@ private:
     return TheBucket;
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   BucketT *InsertIntoBucket(const KeyT &Key, ValueT &&Value,
                             BucketT *TheBucket) {
     TheBucket = InsertIntoBucketImpl(Key, TheBucket);
@@ -420,9 +420,10 @@ private:
       NumBuckets = getNumBuckets();
     }
     if (NumBuckets-(NewNumEntries+getNumTombstones()) <= NumBuckets/8) {
-      this->grow(NumBuckets);
+      this->grow(NumBuckets * 2);
       LookupBucketFor(Key, TheBucket);
     }
+    assert(TheBucket);
 
     // Only update the state after we've grown our bucket space appropriately
     // so that when growing buckets we have self-consistent entry count.
@@ -535,7 +536,7 @@ public:
     copyFrom(other);
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   DenseMap(DenseMap &&other) {
     init(0);
     swap(other);
@@ -565,7 +566,7 @@ public:
     return *this;
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   DenseMap& operator=(DenseMap &&other) {
     this->destroyAll();
     operator delete(Buckets);
@@ -599,7 +600,7 @@ public:
     unsigned OldNumBuckets = NumBuckets;
     BucketT *OldBuckets = Buckets;
 
-    allocateBuckets(std::max<unsigned>(64, NextPowerOf2(AtLeast)));
+    allocateBuckets(std::max<unsigned>(64, NextPowerOf2(AtLeast-1)));
     assert(Buckets);
     if (!OldBuckets) {
       this->BaseT::initEmpty();
@@ -699,7 +700,7 @@ public:
     copyFrom(other);
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   SmallDenseMap(SmallDenseMap &&other) {
     init(0);
     swap(other);
@@ -794,7 +795,7 @@ public:
     return *this;
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   SmallDenseMap& operator=(SmallDenseMap &&other) {
     this->destroyAll();
     deallocateBuckets();
@@ -825,11 +826,11 @@ public:
   }
 
   void grow(unsigned AtLeast) {
-    if (AtLeast > InlineBuckets)
-      AtLeast = std::max<unsigned>(64, NextPowerOf2(AtLeast));
+    if (AtLeast >= InlineBuckets)
+      AtLeast = std::max<unsigned>(64, NextPowerOf2(AtLeast-1));
 
     if (Small) {
-      if (AtLeast <= InlineBuckets)
+      if (AtLeast < InlineBuckets)
         return; // Nothing to do.
 
       // First move the inline buckets into a temporary storage.

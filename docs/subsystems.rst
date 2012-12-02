@@ -15,13 +15,23 @@ Subsystem Documentation
    LinkTimeOptimization
    SegmentedStacks
    TableGenFundamentals
+   DebuggingJITedCode
+   GoldPlugin
+   MarkedUpDisassembly
+   HowToUseInstrMappings
+   SystemLibrary
+   SourceLevelDebugging
+   WritingAnLLVMBackend
+
+.. FIXME: once LangRef is Sphinxified, HowToUseInstrMappings should be put
+   under LangRef's toctree instead of this page's toctree.
 
 * `Writing an LLVM Pass <WritingAnLLVMPass.html>`_
     
    Information on how to write LLVM transformations and analyses.
     
-* `Writing an LLVM Backend <WritingAnLLVMBackend.html>`_
-    
+* :doc:`WritingAnLLVMBackend`
+
    Information on how to write LLVM backends for machine targets.
 
 * :ref:`code_generator`
@@ -45,7 +55,7 @@ Subsystem Documentation
    The interfaces source-language compilers should use for compiling GC'd
    programs.
 
-* `Source Level Debugging with LLVM <SourceLevelDebugging.html>`_
+* :doc:`Source Level Debugging with LLVM <SourceLevelDebugging>`
     
    This document describes the design and philosophy behind the LLVM
    source-level debugger.
@@ -64,9 +74,9 @@ Subsystem Documentation
     
    This describes the file format and encoding used for LLVM "bc" files.
     
-* `System Library <SystemLibrary.html>`_
+* :doc:`System Library <SystemLibrary>`
     
-   This document describes the LLVM System Library (<tt>lib/System</tt>) and
+   This document describes the LLVM System Library (``lib/System``) and
    how to keep LLVM source code portable
     
 * :ref:`lto`
@@ -74,11 +84,11 @@ Subsystem Documentation
    This document describes the interface between LLVM intermodular optimizer
    and the linker and its design
     
-* `The LLVM gold plugin <GoldPlugin.html>`_
+* :ref:`gold-plugin`
     
    How to build your programs with link-time optimization on Linux.
     
-* `The GDB JIT interface <DebuggingJITedCode.html>`_
+* :ref:`debugging-jited-code`
     
    How to debug JITed code with GDB.
     
@@ -89,3 +99,15 @@ Subsystem Documentation
 * :ref:`segmented_stacks`
 
    This document describes segmented stacks and how they are used in LLVM.
+
+* `Howto: Implementing LLVM Integrated Assembler`_
+
+   A simple guide for how to implement an LLVM integrated assembler for an
+   architecture.
+
+.. _`Howto: Implementing LLVM Integrated Assembler`: http://www.embecosm.com/download/ean10.html
+
+* :ref:`marked_up_disassembly`
+
+   This document describes the optional rich disassembly output syntax.
+

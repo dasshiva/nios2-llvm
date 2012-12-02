@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Support/CommandLine.h"
@@ -49,8 +50,8 @@ static cl::opt<bool> DisableSSC("disable-ssc", cl::Hidden,
     cl::desc("Disable Stack Slot Coloring"));
 static cl::opt<bool> DisableMachineDCE("disable-machine-dce", cl::Hidden,
     cl::desc("Disable Machine Dead Code Elimination"));
-static cl::opt<bool> EnableEarlyIfConversion("enable-early-ifcvt", cl::Hidden,
-    cl::desc("Enable Early If-conversion"));
+static cl::opt<bool> DisableEarlyIfConversion("disable-early-ifcvt", cl::Hidden,
+    cl::desc("Disable Early If-conversion"));
 static cl::opt<bool> DisableMachineLICM("disable-machine-licm", cl::Hidden,
     cl::desc("Disable Machine LICM"));
 static cl::opt<bool> DisableMachineCSE("disable-machine-cse", cl::Hidden,
@@ -161,7 +162,7 @@ static AnalysisID overridePass(AnalysisID StandardID, AnalysisID TargetID) {
     return applyDisable(TargetID, DisableMachineDCE);
 
   if (StandardID == &EarlyIfConverterID)
-    return applyDisable(TargetID, !EnableEarlyIfConversion);
+    return applyDisable(TargetID, DisableEarlyIfConversion);
 
   if (StandardID == &MachineLICMID)
     return applyDisable(TargetID, DisableMachineLICM);
@@ -241,7 +242,9 @@ TargetPassConfig::TargetPassConfig(TargetMachine *tm, PassManagerBase &pm)
   disablePass(&EarlyIfConverterID);
 
   // Temporarily disable experimental passes.
-  substitutePass(&MachineSchedulerID, 0);
+  const TargetSubtargetInfo &ST = TM->getSubtarget<TargetSubtargetInfo>();
+  if (!ST.enableMachineScheduler())
+    disablePass(&MachineSchedulerID);
 }
 
 /// Insert InsertedPassID pass after TargetPassID.
@@ -397,12 +400,16 @@ void TargetPassConfig::addPassesToHandleExceptions() {
   }
 }
 
+/// Add pass to prepare the LLVM IR for code generation. This should be done
+/// before exception handling preparation passes.
+void TargetPassConfig::addCodeGenPrepare() {
+  if (getOptLevel() != CodeGenOpt::None && !DisableCGP)
+    addPass(createCodeGenPreparePass(getTargetLowering()));
+}
+
 /// Add common passes that perform LLVM IR to IR transforms in preparation for
 /// instruction selection.
 void TargetPassConfig::addISelPrepare() {
-  if (getOptLevel() != CodeGenOpt::None && !DisableCGP)
-    addPass(createCodeGenPreparePass(getTargetLowering()));
-
   addPass(createStackProtectorPass(getTargetLowering()));
 
   addPreISel();
@@ -462,8 +469,7 @@ void TargetPassConfig::addMachinePasses() {
   // Add passes that optimize machine instructions in SSA form.
   if (getOptLevel() != CodeGenOpt::None) {
     addMachineSSAOptimization();
-  }
-  else {
+  } else {
     // If the target requests it, assign local variables to stack slots relative
     // to one another and simplify frame index references where possible.
     addPass(&LocalStackSlotAllocationID);

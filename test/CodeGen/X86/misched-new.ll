@@ -1,4 +1,6 @@
-; RUN: llc -march=x86-64 -mcpu=core2 -enable-misched -misched=shuffle -misched-bottomup < %s
+; RUN: llc < %s -march=x86-64 -mcpu=core2 -x86-early-ifcvt -enable-misched \
+; RUN:          -misched=shuffle -misched-bottomup -verify-machineinstrs \
+; RUN:     | FileCheck %s
 ; REQUIRES: asserts
 ;
 ; Interesting MachineScheduler cases.
@@ -23,5 +25,55 @@ for.cond.preheader:                               ; preds = %entry
   unreachable
 
 if.end:                                           ; preds = %entry
+  ret void
+}
+
+; The machine verifier checks that EFLAGS kill flags are updated when
+; the scheduler reorders cmovel instructions.
+;
+; CHECK: test
+; CHECK: cmovel
+; CHECK: cmovel
+; CHECK: call
+define void @foo(i32 %b) nounwind uwtable ssp {
+entry:
+  %tobool = icmp ne i32 %b, 0
+  br i1 %tobool, label %if.then, label %if.end
+
+if.then:                                          ; preds = %entry
+  br label %if.end
+
+if.end:                                           ; preds = %if.then, %entry
+  %v1 = phi i32 [1, %entry], [2, %if.then]
+  %v2 = phi i32 [3, %entry], [4, %if.then]
+  call void @bar(i32 %v1, i32 %v2)
+  ret void
+}
+
+declare void @bar(i32,i32)
+
+; Test that the DAG builder can handle an undef vreg on ExitSU.
+; CHECK: hasundef
+; CHECK: call
+
+%t0 = type { i32, i32, i8 }
+%t6 = type { i32 (...)**, %t7* }
+%t7 = type { i32 (...)** }
+
+define void @hasundef() unnamed_addr uwtable ssp align 2 {
+  %1 = alloca %t0, align 8
+  br i1 undef, label %3, label %2
+
+; <label>:2                                       ; preds = %0
+  unreachable
+
+; <label>:3                                       ; preds = %0
+  br i1 undef, label %4, label %5
+
+; <label>:4                                       ; preds = %3
+  call void undef(%t6* undef, %t0* %1)
+  unreachable
+
+; <label>:5                                       ; preds = %3
   ret void
 }

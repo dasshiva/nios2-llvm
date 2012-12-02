@@ -50,7 +50,15 @@ ObjectFile *ObjectFile::createMachOObjectFile(MemoryBuffer *Buffer) {
   MachOObject *MachOObj = MachOObject::LoadFromBuffer(Buffer, &Err);
   if (!MachOObj)
     return NULL;
-  return new MachOObjectFile(Buffer, MachOObj, ec);
+  // MachOObject takes ownership of the Buffer we passed to it, and
+  // MachOObjectFile does, too, so we need to make sure they don't get the
+  // same object. A MemoryBuffer is cheap (it's just a reference to memory,
+  // not a copy of the memory itself), so just make a new copy here for
+  // the MachOObjectFile.
+  MemoryBuffer *NewBuffer =
+    MemoryBuffer::getMemBuffer(Buffer->getBuffer(),
+                               Buffer->getBufferIdentifier(), false);
+  return new MachOObjectFile(NewBuffer, MachOObj, ec);
 }
 
 /*===-- Symbols -----------------------------------------------------------===*/
@@ -363,6 +371,10 @@ error_code MachOObjectFile::getSymbolType(DataRefImpl Symb,
   return object_error::success;
 }
 
+error_code MachOObjectFile::getSymbolValue(DataRefImpl Symb,
+                                           uint64_t &Val) const {
+  report_fatal_error("getSymbolValue unimplemented in MachOObjectFile");
+}
 
 symbol_iterator MachOObjectFile::begin_symbols() const {
   // DRI.d.a = segment number; DRI.d.b = symbol index.
@@ -470,7 +482,7 @@ error_code MachOObjectFile::getSectionName(DataRefImpl DRI,
                                            StringRef &Result) const {
   // FIXME: thread safety.
   static char result[34];
-  if (is64BitLoadCommand(MachOObj, DRI)) {
+  if (is64BitLoadCommand(MachOObj.get(), DRI)) {
     InMemoryStruct<macho::Segment64LoadCommand> SLC;
     LoadCommandInfo LCI = MachOObj->getLoadCommandInfo(DRI.d.a);
     MachOObj->ReadSegment64LoadCommand(LCI, SLC);
@@ -497,7 +509,7 @@ error_code MachOObjectFile::getSectionName(DataRefImpl DRI,
 
 error_code MachOObjectFile::getSectionAddress(DataRefImpl DRI,
                                               uint64_t &Result) const {
-  if (is64BitLoadCommand(MachOObj, DRI)) {
+  if (is64BitLoadCommand(MachOObj.get(), DRI)) {
     InMemoryStruct<macho::Section64> Sect;
     getSection64(DRI, Sect);
     Result = Sect->Address;
@@ -511,7 +523,7 @@ error_code MachOObjectFile::getSectionAddress(DataRefImpl DRI,
 
 error_code MachOObjectFile::getSectionSize(DataRefImpl DRI,
                                            uint64_t &Result) const {
-  if (is64BitLoadCommand(MachOObj, DRI)) {
+  if (is64BitLoadCommand(MachOObj.get(), DRI)) {
     InMemoryStruct<macho::Section64> Sect;
     getSection64(DRI, Sect);
     Result = Sect->Size;
@@ -525,7 +537,7 @@ error_code MachOObjectFile::getSectionSize(DataRefImpl DRI,
 
 error_code MachOObjectFile::getSectionContents(DataRefImpl DRI,
                                                StringRef &Result) const {
-  if (is64BitLoadCommand(MachOObj, DRI)) {
+  if (is64BitLoadCommand(MachOObj.get(), DRI)) {
     InMemoryStruct<macho::Section64> Sect;
     getSection64(DRI, Sect);
     Result = MachOObj->getData(Sect->Offset, Sect->Size);
@@ -539,7 +551,7 @@ error_code MachOObjectFile::getSectionContents(DataRefImpl DRI,
 
 error_code MachOObjectFile::getSectionAlignment(DataRefImpl DRI,
                                                 uint64_t &Result) const {
-  if (is64BitLoadCommand(MachOObj, DRI)) {
+  if (is64BitLoadCommand(MachOObj.get(), DRI)) {
     InMemoryStruct<macho::Section64> Sect;
     getSection64(DRI, Sect);
     Result = uint64_t(1) << Sect->Align;
@@ -553,7 +565,7 @@ error_code MachOObjectFile::getSectionAlignment(DataRefImpl DRI,
 
 error_code MachOObjectFile::isSectionText(DataRefImpl DRI,
                                           bool &Result) const {
-  if (is64BitLoadCommand(MachOObj, DRI)) {
+  if (is64BitLoadCommand(MachOObj.get(), DRI)) {
     InMemoryStruct<macho::Section64> Sect;
     getSection64(DRI, Sect);
     Result = !strcmp(Sect->Name, "__text");
@@ -581,14 +593,14 @@ error_code MachOObjectFile::isSectionBSS(DataRefImpl DRI,
 
 error_code MachOObjectFile::isSectionRequiredForExecution(DataRefImpl Sec,
                                                           bool &Result) const {
-  // FIXME: Unimplemented
+  // FIXME: Unimplemented.
   Result = true;
   return object_error::success;
 }
 
 error_code MachOObjectFile::isSectionVirtual(DataRefImpl Sec,
-                                            bool &Result) const {
-  // FIXME: Unimplemented
+                                             bool &Result) const {
+  // FIXME: Unimplemented.
   Result = false;
   return object_error::success;
 }
@@ -609,6 +621,17 @@ error_code MachOObjectFile::isSectionZeroInit(DataRefImpl DRI,
               SectionType == MachO::SectionTypeZeroFillLarge);
   }
 
+  return object_error::success;
+}
+
+error_code MachOObjectFile::isSectionReadOnlyData(DataRefImpl Sec,
+                                                  bool &Result) const {
+  // Consider using the code from isSectionText to look for __const sections.
+  // Alternately, emit S_ATTR_PURE_INSTRUCTIONS and/or S_ATTR_SOME_INSTRUCTIONS
+  // to use section attributes to distinguish code from data.
+
+  // FIXME: Unimplemented.
+  Result = false;
   return object_error::success;
 }
 
@@ -649,7 +672,7 @@ relocation_iterator MachOObjectFile::getSectionRelBegin(DataRefImpl Sec) const {
 }
 relocation_iterator MachOObjectFile::getSectionRelEnd(DataRefImpl Sec) const {
   uint32_t last_reloc;
-  if (is64BitLoadCommand(MachOObj, Sec)) {
+  if (is64BitLoadCommand(MachOObj.get(), Sec)) {
     InMemoryStruct<macho::Section64> Sect;
     getSection64(Sec, Sect);
     last_reloc = Sect->NumRelocationTableEntries;

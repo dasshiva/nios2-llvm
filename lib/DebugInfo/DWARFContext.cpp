@@ -17,6 +17,8 @@
 using namespace llvm;
 using namespace dwarf;
 
+typedef DWARFDebugLine::LineTable DWARFLineTable;
+
 void DWARFContext::dump(raw_ostream &OS) {
   OS << ".debug_abbrev contents:\n";
   getDebugAbbrev()->dump(OS);
@@ -33,7 +35,7 @@ void DWARFContext::dump(raw_ostream &OS) {
     set.dump(OS);
 
   uint8_t savedAddressByteSize = 0;
-  OS << "\n.debug_lines contents:\n";
+  OS << "\n.debug_line contents:\n";
   for (unsigned i = 0, e = getNumCompileUnits(); i != e; ++i) {
     DWARFCompileUnit *cu = getCompileUnitAtIndex(i);
     savedAddressByteSize = cu->getAddressByteSize();
@@ -89,12 +91,14 @@ const DWARFDebugAranges *DWARFContext::getDebugAranges() {
 
   Aranges.reset(new DWARFDebugAranges());
   Aranges->extract(arangesData);
-  if (Aranges->isEmpty()) // No aranges in file, generate them from the DIEs.
-    Aranges->generate(this);
+  // Generate aranges from DIEs: even if .debug_aranges section is present,
+  // it may describe only a small subset of compilation units, so we need to
+  // manually build aranges for the rest of them.
+  Aranges->generate(this);
   return Aranges.get();
 }
 
-const DWARFDebugLine::LineTable *
+const DWARFLineTable *
 DWARFContext::getLineTableForCompileUnit(DWARFCompileUnit *cu) {
   if (!Line)
     Line.reset(new DWARFDebugLine());
@@ -106,7 +110,7 @@ DWARFContext::getLineTableForCompileUnit(DWARFCompileUnit *cu) {
     return 0; // No line table for this compile unit.
 
   // See if the line table is cached.
-  if (const DWARFDebugLine::LineTable *lt = Line->getLineTable(stmtOffset))
+  if (const DWARFLineTable *lt = Line->getLineTable(stmtOffset))
     return lt;
 
   // We have to parse it first.
@@ -117,11 +121,11 @@ DWARFContext::getLineTableForCompileUnit(DWARFCompileUnit *cu) {
 
 void DWARFContext::parseCompileUnits() {
   uint32_t offset = 0;
-  const DataExtractor &debug_info_data = DataExtractor(getInfoSection(),
-                                                       isLittleEndian(), 0);
-  while (debug_info_data.isValidOffset(offset)) {
+  const DataExtractor &DIData = DataExtractor(getInfoSection(),
+                                              isLittleEndian(), 0);
+  while (DIData.isValidOffset(offset)) {
     CUs.push_back(DWARFCompileUnit(*this));
-    if (!CUs.back().extract(debug_info_data, &offset)) {
+    if (!CUs.back().extract(DIData, &offset)) {
       CUs.pop_back();
       break;
     }
@@ -163,9 +167,11 @@ DWARFCompileUnit *DWARFContext::getCompileUnitForAddress(uint64_t Address) {
   return getCompileUnitForOffset(CUOffset);
 }
 
-static bool getFileNameForCompileUnit(
-    DWARFCompileUnit *CU, const DWARFDebugLine::LineTable *LineTable,
-    uint64_t FileIndex, bool NeedsAbsoluteFilePath, std::string &FileName) {
+static bool getFileNameForCompileUnit(DWARFCompileUnit *CU,
+                                      const DWARFLineTable *LineTable,
+                                      uint64_t FileIndex,
+                                      bool NeedsAbsoluteFilePath,
+                                      std::string &FileName) {
   if (CU == 0 ||
       LineTable == 0 ||
       !LineTable->getFileNameByIndex(FileIndex, NeedsAbsoluteFilePath,
@@ -183,10 +189,12 @@ static bool getFileNameForCompileUnit(
   return true;
 }
 
-static bool getFileLineInfoForCompileUnit(
-    DWARFCompileUnit *CU, const DWARFDebugLine::LineTable *LineTable,
-    uint64_t Address, bool NeedsAbsoluteFilePath, std::string &FileName,
-    uint32_t &Line, uint32_t &Column) {
+static bool getFileLineInfoForCompileUnit(DWARFCompileUnit *CU,
+                                          const DWARFLineTable *LineTable,
+                                          uint64_t Address,
+                                          bool NeedsAbsoluteFilePath,
+                                          std::string &FileName,
+                                          uint32_t &Line, uint32_t &Column) {
   if (CU == 0 || LineTable == 0)
     return false;
   // Get the index of row we're looking for in the line table.
@@ -225,8 +233,7 @@ DILineInfo DWARFContext::getLineInfoForAddress(uint64_t Address,
     }
   }
   if (Specifier.needs(DILineInfoSpecifier::FileLineInfo)) {
-    const DWARFDebugLine::LineTable *LineTable =
-        getLineTableForCompileUnit(CU);
+    const DWARFLineTable *LineTable = getLineTableForCompileUnit(CU);
     const bool NeedsAbsoluteFilePath =
         Specifier.needs(DILineInfoSpecifier::AbsoluteFilePath);
     getFileLineInfoForCompileUnit(CU, LineTable, Address,
@@ -250,7 +257,7 @@ DIInliningInfo DWARFContext::getInliningInfoForAddress(uint64_t Address,
 
   DIInliningInfo InliningInfo;
   uint32_t CallFile = 0, CallLine = 0, CallColumn = 0;
-  const DWARFDebugLine::LineTable *LineTable = 0;
+  const DWARFLineTable *LineTable = 0;
   for (uint32_t i = 0, n = InlinedChain.size(); i != n; i++) {
     const DWARFDebugInfoEntryMinimal &FunctionDIE = InlinedChain[i];
     std::string FileName = "<invalid>";
@@ -291,6 +298,86 @@ DIInliningInfo DWARFContext::getInliningInfoForAddress(uint64_t Address,
     InliningInfo.addFrame(Frame);
   }
   return InliningInfo;
+}
+
+DWARFContextInMemory::DWARFContextInMemory(object::ObjectFile *Obj) :
+  IsLittleEndian(true /* FIXME */) {
+  error_code ec;
+  for (object::section_iterator i = Obj->begin_sections(),
+         e = Obj->end_sections();
+       i != e; i.increment(ec)) {
+    StringRef name;
+    i->getName(name);
+    StringRef data;
+    i->getContents(data);
+
+    if (name.startswith("__DWARF,"))
+      name = name.substr(8); // Skip "__DWARF," prefix.
+    name = name.substr(name.find_first_not_of("._")); // Skip . and _ prefixes.
+    if (name == "debug_info")
+      InfoSection = data;
+    else if (name == "debug_abbrev")
+      AbbrevSection = data;
+    else if (name == "debug_line")
+      LineSection = data;
+    else if (name == "debug_aranges")
+      ARangeSection = data;
+    else if (name == "debug_str")
+      StringSection = data;
+    else if (name == "debug_ranges")
+      RangeSection = data;
+    // Any more debug info sections go here.
+    else
+      continue;
+
+    // TODO: For now only handle relocations for the debug_info section.
+    if (name != "debug_info")
+      continue;
+
+    if (i->begin_relocations() != i->end_relocations()) {
+      uint64_t SectionSize;
+      i->getSize(SectionSize);
+      for (object::relocation_iterator reloc_i = i->begin_relocations(),
+             reloc_e = i->end_relocations();
+           reloc_i != reloc_e; reloc_i.increment(ec)) {
+        uint64_t Address;
+        reloc_i->getAddress(Address);
+        uint64_t Type;
+        reloc_i->getType(Type);
+
+        object::RelocVisitor V(Obj->getFileFormatName());
+        // The section address is always 0 for debug sections.
+        object::RelocToApply R(V.visit(Type, *reloc_i));
+        if (V.error()) {
+          SmallString<32> Name;
+          error_code ec(reloc_i->getTypeName(Name));
+          if (ec) {
+            errs() << "Aaaaaa! Nameless relocation! Aaaaaa!\n";
+          }
+          errs() << "error: failed to compute relocation: "
+                 << Name << "\n";
+          continue;
+        }
+
+        if (Address + R.Width > SectionSize) {
+          errs() << "error: " << R.Width << "-byte relocation starting "
+                 << Address << " bytes into section " << name << " which is "
+                 << SectionSize << " bytes long.\n";
+          continue;
+        }
+        if (R.Width > 8) {
+          errs() << "error: can't handle a relocation of more than 8 bytes at "
+                    "a time.\n";
+          continue;
+        }
+        DEBUG(dbgs() << "Writing " << format("%p", R.Value)
+                     << " at " << format("%p", Address)
+                     << " with width " << format("%d", R.Width)
+                     << "\n");
+        RelocMap[Address] = std::make_pair(R.Width, R.Value);
+      }
+    }
+  }
 }
 
 void DWARFContextInMemory::anchor() { }

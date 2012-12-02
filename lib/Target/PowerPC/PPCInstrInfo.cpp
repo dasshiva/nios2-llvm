@@ -60,7 +60,7 @@ ScheduleHazardRecognizer *PPCInstrInfo::CreateTargetHazardRecognizer(
     return new PPCScoreboardHazardRecognizer(II, DAG);
   }
 
-  return TargetInstrInfoImpl::CreateTargetHazardRecognizer(TM, DAG);
+  return TargetInstrInfo::CreateTargetHazardRecognizer(TM, DAG);
 }
 
 /// CreateTargetPostRAHazardRecognizer - Return the postRA hazard recognizer
@@ -141,7 +141,7 @@ PPCInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI) const {
 
   // Normal instructions can be commuted the obvious way.
   if (MI->getOpcode() != PPC::RLWIMI)
-    return TargetInstrInfoImpl::commuteInstruction(MI, NewMI);
+    return TargetInstrInfo::commuteInstruction(MI, NewMI);
 
   // Cannot commute if it has a non-zero rotate count.
   if (MI->getOperand(3).getImm() != 0)
@@ -570,12 +570,15 @@ PPCInstrInfo::StoreRegToStackSlot(MachineFunction &MF,
     // STVX VAL, 0, R0
     //
     // FIXME: We use R0 here, because it isn't available for RA.
-    NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(PPC::ADDI), PPC::R0),
+    bool Is64Bit = TM.getSubtargetImpl()->isPPC64();
+    unsigned Instr = Is64Bit ? PPC::ADDI8 : PPC::ADDI;
+    unsigned GPR0  = Is64Bit ? PPC::X0    : PPC::R0;
+    NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(Instr), GPR0),
                                        FrameIdx, 0, 0));
     NewMIs.push_back(BuildMI(MF, DL, get(PPC::STVX))
                      .addReg(SrcReg, getKillRegState(isKill))
-                     .addReg(PPC::R0)
-                     .addReg(PPC::R0));
+                     .addReg(GPR0)
+                     .addReg(GPR0));
   } else {
     llvm_unreachable("Unknown regclass!");
   }
@@ -707,10 +710,13 @@ PPCInstrInfo::LoadRegFromStackSlot(MachineFunction &MF, DebugLoc DL,
     // Dest = LVX 0, R0
     //
     // FIXME: We use R0 here, because it isn't available for RA.
-    NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(PPC::ADDI), PPC::R0),
+    bool Is64Bit = TM.getSubtargetImpl()->isPPC64();
+    unsigned Instr = Is64Bit ? PPC::ADDI8 : PPC::ADDI;
+    unsigned GPR0  = Is64Bit ? PPC::X0    : PPC::R0;
+    NewMIs.push_back(addFrameReference(BuildMI(MF, DL, get(Instr), GPR0),
                                        FrameIdx, 0, 0));
-    NewMIs.push_back(BuildMI(MF, DL, get(PPC::LVX),DestReg).addReg(PPC::R0)
-                     .addReg(PPC::R0));
+    NewMIs.push_back(BuildMI(MF, DL, get(PPC::LVX),DestReg).addReg(GPR0)
+                     .addReg(GPR0));
   } else {
     llvm_unreachable("Unknown regclass!");
   }

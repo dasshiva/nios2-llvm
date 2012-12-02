@@ -44,12 +44,11 @@ public:
   virtual unsigned getArch() const;
   virtual StringRef getLoadName() const;
 
-  MachOObject *getObject() { return MachOObj; }
+  MachOObject *getObject() { return MachOObj.get(); }
 
   static inline bool classof(const Binary *v) {
     return v->isMachO();
   }
-  static inline bool classof(const MachOObjectFile *v) { return true; }
 
 protected:
   virtual error_code getSymbolNext(DataRefImpl Symb, SymbolRef &Res) const;
@@ -62,6 +61,7 @@ protected:
   virtual error_code getSymbolType(DataRefImpl Symb, SymbolRef::Type &Res) const;
   virtual error_code getSymbolSection(DataRefImpl Symb,
                                       section_iterator &Res) const;
+  virtual error_code getSymbolValue(DataRefImpl Symb, uint64_t &Val) const;
 
   virtual error_code getSectionNext(DataRefImpl Sec, SectionRef &Res) const;
   virtual error_code getSectionName(DataRefImpl Sec, StringRef &Res) const;
@@ -76,6 +76,7 @@ protected:
                                                    bool &Res) const;
   virtual error_code isSectionVirtual(DataRefImpl Sec, bool &Res) const;
   virtual error_code isSectionZeroInit(DataRefImpl Sec, bool &Res) const;
+  virtual error_code isSectionReadOnlyData(DataRefImpl Sec, bool &Res) const;
   virtual error_code sectionContainsSymbol(DataRefImpl DRI, DataRefImpl S,
                                            bool &Result) const;
   virtual relocation_iterator getSectionRelBegin(DataRefImpl Sec) const;
@@ -103,7 +104,7 @@ protected:
   virtual error_code getLibraryPath(DataRefImpl LibData, StringRef &Res) const;
 
 private:
-  MachOObject *MachOObj;
+  OwningPtr<MachOObject> MachOObj;
   mutable uint32_t RegisteredStringTable;
   typedef SmallVector<DataRefImpl, 1> SectionList;
   SectionList Sections;

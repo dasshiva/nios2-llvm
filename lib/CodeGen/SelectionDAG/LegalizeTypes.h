@@ -578,6 +578,7 @@ private:
 
   // Vector Operand Splitting: <128 x ty> -> 2 x <64 x ty>.
   bool SplitVectorOperand(SDNode *N, unsigned OpNo);
+  SDValue SplitVecOp_VSELECT(SDNode *N, unsigned OpNo);
   SDValue SplitVecOp_UnaryOp(SDNode *N);
 
   SDValue SplitVecOp_BITCAST(SDNode *N);
@@ -634,7 +635,7 @@ private:
   SDValue WidenVecRes_InregOp(SDNode *N);
 
   // Widen Vector Operand.
-  bool WidenVectorOperand(SDNode *N, unsigned ResNo);
+  bool WidenVectorOperand(SDNode *N, unsigned OpNo);
   SDValue WidenVecOp_BITCAST(SDNode *N);
   SDValue WidenVecOp_CONCAT_VECTORS(SDNode *N);
   SDValue WidenVecOp_EXTRACT_VECTOR_ELT(SDNode *N);

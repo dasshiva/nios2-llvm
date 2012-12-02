@@ -47,33 +47,15 @@ Type *Type::getScalarType() {
   return this;
 }
 
+const Type *Type::getScalarType() const {
+  if (const VectorType *VTy = dyn_cast<VectorType>(this))
+    return VTy->getElementType();
+  return this;
+}
+
 /// isIntegerTy - Return true if this is an IntegerType of the specified width.
 bool Type::isIntegerTy(unsigned Bitwidth) const {
   return isIntegerTy() && cast<IntegerType>(this)->getBitWidth() == Bitwidth;
-}
-
-/// isIntOrIntVectorTy - Return true if this is an integer type or a vector of
-/// integer types.
-///
-bool Type::isIntOrIntVectorTy() const {
-  if (isIntegerTy())
-    return true;
-  if (getTypeID() != Type::VectorTyID) return false;
-  
-  return cast<VectorType>(this)->getElementType()->isIntegerTy();
-}
-
-/// isFPOrFPVectorTy - Return true if this is a FP type or a vector of FP types.
-///
-bool Type::isFPOrFPVectorTy() const {
-  if (getTypeID() == Type::HalfTyID || getTypeID() == Type::FloatTyID ||
-      getTypeID() == Type::DoubleTyID ||
-      getTypeID() == Type::FP128TyID || getTypeID() == Type::X86_FP80TyID || 
-      getTypeID() == Type::PPC_FP128TyID)
-    return true;
-  if (getTypeID() != Type::VectorTyID) return false;
-  
-  return cast<VectorType>(this)->getElementType()->isFloatingPointTy();
 }
 
 // canLosslesslyBitCastTo - Return true if this type can be converted to
@@ -233,7 +215,7 @@ unsigned Type::getVectorNumElements() const {
 }
 
 unsigned Type::getPointerAddressSpace() const {
-  return cast<PointerType>(this)->getAddressSpace();
+  return cast<PointerType>(getScalarType())->getAddressSpace();
 }
 
 
@@ -647,11 +629,12 @@ StructType *Module::getTypeByName(StringRef Name) const {
 
 Type *CompositeType::getTypeAtIndex(const Value *V) {
   if (StructType *STy = dyn_cast<StructType>(this)) {
-    unsigned Idx = (unsigned)cast<ConstantInt>(V)->getZExtValue();
+    unsigned Idx =
+      (unsigned)cast<Constant>(V)->getUniqueInteger().getZExtValue();
     assert(indexValid(Idx) && "Invalid structure index!");
     return STy->getElementType(Idx);
   }
-  
+
   return cast<SequentialType>(this)->getElementType();
 }
 Type *CompositeType::getTypeAtIndex(unsigned Idx) {
@@ -664,15 +647,19 @@ Type *CompositeType::getTypeAtIndex(unsigned Idx) {
 }
 bool CompositeType::indexValid(const Value *V) const {
   if (const StructType *STy = dyn_cast<StructType>(this)) {
-    // Structure indexes require 32-bit integer constants.
-    if (V->getType()->isIntegerTy(32))
-      if (const ConstantInt *CU = dyn_cast<ConstantInt>(V))
-        return CU->getZExtValue() < STy->getNumElements();
-    return false;
+    // Structure indexes require (vectors of) 32-bit integer constants.  In the
+    // vector case all of the indices must be equal.
+    if (!V->getType()->getScalarType()->isIntegerTy(32))
+      return false;
+    const Constant *C = dyn_cast<Constant>(V);
+    if (C && V->getType()->isVectorTy())
+      C = C->getSplatValue();
+    const ConstantInt *CU = dyn_cast_or_null<ConstantInt>(C);
+    return CU && CU->getZExtValue() < STy->getNumElements();
   }
-  
+
   // Sequential types can be indexed by any integer.
-  return V->getType()->isIntegerTy();
+  return V->getType()->isIntOrIntVectorTy();
 }
 
 bool CompositeType::indexValid(unsigned Idx) const {
@@ -735,9 +722,8 @@ VectorType *VectorType::get(Type *elementType, unsigned NumElements) {
 }
 
 bool VectorType::isValidElementType(Type *ElemTy) {
-  if (PointerType *PTy = dyn_cast<PointerType>(ElemTy))
-    ElemTy = PTy->getElementType();
-  return ElemTy->isIntegerTy() || ElemTy->isFloatingPointTy();
+  return ElemTy->isIntegerTy() || ElemTy->isFloatingPointTy() ||
+    ElemTy->isPointerTy();
 }
 
 //===----------------------------------------------------------------------===//

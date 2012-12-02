@@ -23,7 +23,7 @@
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/TargetFolder.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/DataLayout.h"
 #include "llvm/Target/TargetLibraryInfo.h"
 #include "llvm/Transforms/Instrumentation.h"
 using namespace llvm;
@@ -41,25 +41,24 @@ namespace {
   struct BoundsChecking : public FunctionPass {
     static char ID;
 
-    BoundsChecking(unsigned _Penalty = 5) : FunctionPass(ID), Penalty(_Penalty){
+    BoundsChecking() : FunctionPass(ID) {
       initializeBoundsCheckingPass(*PassRegistry::getPassRegistry());
     }
 
     virtual bool runOnFunction(Function &F);
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-      AU.addRequired<TargetData>();
+      AU.addRequired<DataLayout>();
       AU.addRequired<TargetLibraryInfo>();
     }
 
   private:
-    const TargetData *TD;
+    const DataLayout *TD;
     const TargetLibraryInfo *TLI;
     ObjectSizeOffsetEvaluator *ObjSizeEval;
     BuilderTy *Builder;
     Instruction *Inst;
     BasicBlock *TrapBB;
-    unsigned Penalty;
 
     BasicBlock *getTrapBB();
     void emitBranchToTrap(Value *Cmp = 0);
@@ -143,7 +142,7 @@ bool BoundsChecking::instrument(Value *Ptr, Value *InstVal) {
   Value *Offset = SizeOffset.second;
   ConstantInt *SizeCI = dyn_cast<ConstantInt>(Size);
 
-  IntegerType *IntTy = TD->getIntPtrType(Inst->getContext());
+  Type *IntTy = TD->getIntPtrType(Ptr->getType());
   Value *NeededSizeVal = ConstantInt::get(IntTy, NeededSize);
 
   // three checks are required to ensure safety:
@@ -168,7 +167,7 @@ bool BoundsChecking::instrument(Value *Ptr, Value *InstVal) {
 }
 
 bool BoundsChecking::runOnFunction(Function &F) {
-  TD = &getAnalysis<TargetData>();
+  TD = &getAnalysis<DataLayout>();
   TLI = &getAnalysis<TargetLibraryInfo>();
 
   TrapBB = 0;
@@ -208,6 +207,6 @@ bool BoundsChecking::runOnFunction(Function &F) {
   return MadeChange;
 }
 
-FunctionPass *llvm::createBoundsCheckingPass(unsigned Penalty) {
-  return new BoundsChecking(Penalty);
+FunctionPass *llvm::createBoundsCheckingPass() {
+  return new BoundsChecking();
 }

@@ -232,7 +232,11 @@ namespace llvm {
       ATOMAND64_DAG,
       ATOMNAND64_DAG,
       ATOMSWAP64_DAG,
-      ATOMCMPXCHG64_DAG
+      ATOMCMPXCHG64_DAG,
+      ATOMMIN64_DAG,
+      ATOMUMIN64_DAG,
+      ATOMMAX64_DAG,
+      ATOMUMAX64_DAG
     };
   }
 
@@ -248,7 +252,7 @@ namespace llvm {
   public:
     explicit ARMTargetLowering(TargetMachine &TM);
 
-    virtual unsigned getJumpTableEncoding(void) const;
+    virtual unsigned getJumpTableEncoding() const;
 
     virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
 
@@ -466,7 +470,11 @@ namespace llvm {
                            SmallVectorImpl<SDValue> &InVals) const;
 
     void VarArgStyleRegisters(CCState &CCInfo, SelectionDAG &DAG,
-                              DebugLoc dl, SDValue &Chain, unsigned ArgOffset)
+                              DebugLoc dl, SDValue &Chain,
+                              const Value *OrigArg,
+                              unsigned OffsetFromOrigArg,
+                              unsigned ArgOffset,
+                              bool ForceMutable = false)
       const;
 
     void computeRegArea(CCState &CCInfo, MachineFunction &MF,
@@ -477,7 +485,7 @@ namespace llvm {
                 SmallVectorImpl<SDValue> &InVals) const;
 
     /// HandleByVal - Target-specific cleanup for ByVal support.
-    virtual void HandleByVal(CCState *, unsigned &) const;
+    virtual void HandleByVal(CCState *, unsigned &, unsigned) const;
 
     /// IsEligibleForTailCallOptimization - Check whether the call is eligible
     /// for tail call optimization. Targets which want to do tail call
@@ -491,6 +499,12 @@ namespace llvm {
                                     const SmallVectorImpl<SDValue> &OutVals,
                                     const SmallVectorImpl<ISD::InputArg> &Ins,
                                            SelectionDAG& DAG) const;
+
+    virtual bool CanLowerReturn(CallingConv::ID CallConv,
+                                MachineFunction &MF, bool isVarArg,
+                                const SmallVectorImpl<ISD::OutputArg> &Outs,
+                                LLVMContext &Context) const;
+
     virtual SDValue
       LowerReturn(SDValue Chain,
                   CallingConv::ID CallConv, bool isVarArg,
@@ -522,7 +536,9 @@ namespace llvm {
                                           unsigned Op1,
                                           unsigned Op2,
                                           bool NeedsCarry = false,
-                                          bool IsCmpxchg = false) const;
+                                          bool IsCmpxchg = false,
+                                          bool IsMinMax = false,
+                                          ARMCC::CondCodes CC = ARMCC::AL) const;
     MachineBasicBlock * EmitAtomicBinaryMinMax(MachineInstr *MI,
                                                MachineBasicBlock *BB,
                                                unsigned Size,

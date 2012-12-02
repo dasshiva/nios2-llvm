@@ -225,20 +225,16 @@ getGlobalAddressWrapper(SDValue GA, const GlobalValue *GV,
 {
   // FIXME there is no actual debug info here
   DebugLoc dl = GA.getDebugLoc();
-  if (isa<Function>(GV)) {
-    return DAG.getNode(XCoreISD::PCRelativeWrapper, dl, MVT::i32, GA);
+  const GlobalValue *UnderlyingGV = GV;
+  // If GV is an alias then use the aliasee to determine the wrapper type
+  if (const GlobalAlias *GA = dyn_cast<GlobalAlias>(GV))
+    UnderlyingGV = GA->resolveAliasedGlobal();
+  if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(UnderlyingGV)) {
+    if (GVar->isConstant())
+      return DAG.getNode(XCoreISD::CPRelativeWrapper, dl, MVT::i32, GA);
+    return DAG.getNode(XCoreISD::DPRelativeWrapper, dl, MVT::i32, GA);
   }
-  const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV);
-  if (!GVar) {
-    // If GV is an alias then use the aliasee to determine constness
-    if (const GlobalAlias *GA = dyn_cast<GlobalAlias>(GV))
-      GVar = dyn_cast_or_null<GlobalVariable>(GA->resolveAliasedGlobal());
-  }
-  bool isConst = GVar && GVar->isConstant();
-  if (isConst) {
-    return DAG.getNode(XCoreISD::CPRelativeWrapper, dl, MVT::i32, GA);
-  }
-  return DAG.getNode(XCoreISD::DPRelativeWrapper, dl, MVT::i32, GA);
+  return DAG.getNode(XCoreISD::PCRelativeWrapper, dl, MVT::i32, GA);
 }
 
 SDValue XCoreTargetLowering::
@@ -285,7 +281,7 @@ LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const
     llvm_unreachable(0);
   }
   SDValue base = getGlobalAddressWrapper(GA, GV, DAG);
-  const TargetData *TD = TM.getTargetData();
+  const DataLayout *TD = TM.getDataLayout();
   unsigned Size = TD->getTypeAllocSize(Ty);
   SDValue offset = DAG.getNode(ISD::MUL, dl, MVT::i32, BuildGetId(DAG, dl),
                        DAG.getConstant(Size, MVT::i32));
@@ -405,7 +401,7 @@ LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   if (allowsUnalignedMemoryAccesses(LD->getMemoryVT()))
     return SDValue();
 
-  unsigned ABIAlignment = getTargetData()->
+  unsigned ABIAlignment = getDataLayout()->
     getABITypeAlignment(LD->getMemoryVT().getTypeForEVT(*DAG.getContext()));
   // Leave aligned load alone.
   if (LD->getAlignment() >= ABIAlignment)
@@ -477,7 +473,7 @@ LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   }
 
   // Lower to a call to __misaligned_load(BasePtr).
-  Type *IntPtrTy = getTargetData()->getIntPtrType(*DAG.getContext());
+  Type *IntPtrTy = getDataLayout()->getIntPtrType(*DAG.getContext());
   TargetLowering::ArgListTy Args;
   TargetLowering::ArgListEntry Entry;
 
@@ -507,7 +503,7 @@ LowerSTORE(SDValue Op, SelectionDAG &DAG) const
   if (allowsUnalignedMemoryAccesses(ST->getMemoryVT())) {
     return SDValue();
   }
-  unsigned ABIAlignment = getTargetData()->
+  unsigned ABIAlignment = getDataLayout()->
     getABITypeAlignment(ST->getMemoryVT().getTypeForEVT(*DAG.getContext()));
   // Leave aligned store alone.
   if (ST->getAlignment() >= ABIAlignment) {
@@ -536,7 +532,7 @@ LowerSTORE(SDValue Op, SelectionDAG &DAG) const
   }
 
   // Lower to a call to __misaligned_store(BasePtr, Value).
-  Type *IntPtrTy = getTargetData()->getIntPtrType(*DAG.getContext());
+  Type *IntPtrTy = getDataLayout()->getIntPtrType(*DAG.getContext());
   TargetLowering::ArgListTy Args;
   TargetLowering::ArgListEntry Entry;
 
@@ -1499,7 +1495,7 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
     if (StoreBits % 8) {
       break;
     }
-    unsigned ABIAlignment = getTargetData()->getABITypeAlignment(
+    unsigned ABIAlignment = getDataLayout()->getABITypeAlignment(
         ST->getMemoryVT().getTypeForEVT(*DCI.DAG.getContext()));
     unsigned Alignment = ST->getAlignment();
     if (Alignment >= ABIAlignment) {
@@ -1570,7 +1566,7 @@ XCoreTargetLowering::isLegalAddressingMode(const AddrMode &AM,
   if (Ty->getTypeID() == Type::VoidTyID)
     return AM.Scale == 0 && isImmUs(AM.BaseOffs) && isImmUs4(AM.BaseOffs);
 
-  const TargetData *TD = TM.getTargetData();
+  const DataLayout *TD = TM.getDataLayout();
   unsigned Size = TD->getTypeAllocSize(Ty);
   if (AM.BaseGV) {
     return Size >= 4 && !AM.HasBaseReg && AM.Scale == 0 &&

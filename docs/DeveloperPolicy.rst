@@ -137,6 +137,9 @@ reviewees. If someone is kind enough to review your code, you should return the
 favor for someone else.  Note that anyone is welcome to review and give feedback
 on a patch, but only people with Subversion write access can approve it.
 
+There is a web based code review tool that can optionally be used
+for code reviews. See :doc:`Phabricator`.
+
 Code Owners
 -----------
 
@@ -177,8 +180,8 @@ Developers are required to create test cases for any bugs fixed and any new
 features added.  Some tips for getting your testcase approved:
 
 * All feature and regression test cases are added to the ``llvm/test``
-  directory. The appropriate sub-directory should be selected (see the `Testing
-  Guide <TestingGuide.html>`_ for details).
+  directory. The appropriate sub-directory should be selected (see the
+  :doc:`Testing Guide <TestingGuide>` for details).
 
 * Test cases should be written in `LLVM assembly language <LangRef.html>`_
   unless the feature or regression being tested requires another language

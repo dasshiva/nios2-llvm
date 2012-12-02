@@ -73,7 +73,6 @@ public:
   }
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const TerminatorInst *) { return true; }
   static inline bool classof(const Instruction *I) {
     return I->isTerminator();
   }
@@ -113,7 +112,6 @@ public:
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const UnaryInstruction *) { return true; }
   static inline bool classof(const Instruction *I) {
     return I->getOpcode() == Instruction::Alloca ||
            I->getOpcode() == Instruction::Load ||
@@ -145,7 +143,7 @@ protected:
                  const Twine &Name, Instruction *InsertBefore);
   BinaryOperator(BinaryOps iType, Value *S1, Value *S2, Type *Ty,
                  const Twine &Name, BasicBlock *InsertAtEnd);
-  virtual BinaryOperator *clone_impl() const;
+  virtual BinaryOperator *clone_impl() const LLVM_OVERRIDE;
 public:
   // allocate space for exactly two operands
   void *operator new(size_t s) {
@@ -361,7 +359,6 @@ public:
   bool isExact() const;
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const BinaryOperator *) { return true; }
   static inline bool classof(const Instruction *I) {
     return I->isBinaryOp();
   }
@@ -388,7 +385,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(BinaryOperator, Value)
 /// if (isa<CastInst>(Instr)) { ... }
 /// @brief Base class of casting instructions.
 class CastInst : public UnaryInstruction {
-  virtual void anchor();
+  virtual void anchor() LLVM_OVERRIDE;
 protected:
   /// @brief Constructor with insert-before-instruction semantics for subclasses
   CastInst(Type *Ty, unsigned iType, Value *S,
@@ -563,7 +560,7 @@ public:
   /// IntPtrTy argument is used to make accurate determinations for casts
   /// involving Integer and Pointer types. They are no-op casts if the integer
   /// is the same size as the pointer. However, pointer size varies with
-  /// platform. Generally, the result of TargetData::getIntPtrType() should be
+  /// platform. Generally, the result of DataLayout::getIntPtrType() should be
   /// passed in. If that's not available, use Type::Int64Ty, which will make
   /// the isNoopCast call conservative.
   /// @brief Determine if the described cast is a no-op cast.
@@ -591,7 +588,9 @@ public:
     Type *SrcTy, ///< SrcTy of 1st cast
     Type *MidTy, ///< DstTy of 1st cast & SrcTy of 2nd cast
     Type *DstTy, ///< DstTy of 2nd cast
-    Type *IntPtrTy ///< Integer type corresponding to Ptr types, or null
+    Type *SrcIntPtrTy, ///< Integer type corresponding to Ptr SrcTy, or null
+    Type *MidIntPtrTy, ///< Integer type corresponding to Ptr MidTy, or null
+    Type *DstIntPtrTy  ///< Integer type corresponding to Ptr DstTy, or null
   );
 
   /// @brief Return the opcode of this CastInst
@@ -611,7 +610,6 @@ public:
   static bool castIsValid(Instruction::CastOps op, Value *S, Type *DstTy);
 
   /// @brief Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const CastInst *) { return true; }
   static inline bool classof(const Instruction *I) {
     return I->isCast();
   }
@@ -638,7 +636,7 @@ protected:
           Value *LHS, Value *RHS, const Twine &Name,
           BasicBlock *InsertAtEnd);
 
-  virtual void Anchor() const; // Out of line virtual method.
+  virtual void anchor() LLVM_OVERRIDE; // Out of line virtual method.
 public:
   /// This enumeration lists the possible predicates for CmpInst subclasses.
   /// Values in the range 0-31 are reserved for FCmpInst, while values in the
@@ -816,7 +814,6 @@ public:
   static bool isFalseWhenEqual(unsigned short predicate);
 
   /// @brief Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const CmpInst *) { return true; }
   static inline bool classof(const Instruction *I) {
     return I->getOpcode() == Instruction::ICmp ||
            I->getOpcode() == Instruction::FCmp;

@@ -1,5 +1,5 @@
-; RUN: llc < %s -march=arm -mcpu=cortex-a8 | FileCheck %s
-; RUN: llc < %s -march=arm -mcpu=cortex-a8 -regalloc=basic | FileCheck %s
+; RUN: llc < %s -mtriple=arm-apple-ios -mcpu=cortex-a8 | FileCheck %s
+; RUN: llc < %s -mtriple=arm-apple-ios -mcpu=cortex-a8 -regalloc=basic | FileCheck %s
 ; Implementing vld / vst as REG_SEQUENCE eliminates the extra vmov's.
 
 %struct.int16x8_t = type { <8 x i16> }
@@ -124,7 +124,6 @@ return1:
 return2:
 ; CHECK:        %return2
 ; CHECK:        vadd.i32
-; CHECK:        vorr {{q[0-9]+}}, {{q[0-9]+}}
 ; CHECK-NOT:    vmov
 ; CHECK:        vst2.32 {d{{[0-9]+}}, d{{[0-9]+}}, d{{[0-9]+}}, d{{[0-9]+}}}
   %tmp100 = extractvalue %struct.__neon_int32x4x2_t %tmp2, 0 ; <<4 x i32>> [#uses=1]

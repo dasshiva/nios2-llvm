@@ -191,7 +191,21 @@ namespace llvm {
       /// byte-swapping load instruction.  It loads "Type" bits, byte swaps it,
       /// then puts it in the bottom bits of the GPRC.  TYPE can be either i16
       /// or i32.
-      LBRX
+      LBRX,
+
+      /// G8RC = ADDIS_TOC_HA %X2, Symbol - For medium code model, produces
+      /// an ADDIS8 instruction that adds the TOC base register to sym@toc@ha.
+      ADDIS_TOC_HA,
+
+      /// G8RC = LD_TOC_L Symbol, G8RReg - For medium code model, produces a
+      /// LD instruction with base register G8RReg and offset sym@toc@l.
+      /// Preceded by an ADDIS_TOC_HA to form a full 32-bit offset.
+      LD_TOC_L,
+
+      /// G8RC = ADDI_TOC_L G8RReg, Symbol - For medium code model, produces
+      /// an ADDI8 instruction that adds G8RReg to sym@toc@l.
+      /// Preceded by an ADDIS_TOC_HA to form a full 32-bit offset.
+      ADDI_TOC_L
     };
   }
 
@@ -467,7 +481,22 @@ namespace llvm {
                   DebugLoc dl, SelectionDAG &DAG) const;
 
     SDValue
-      LowerFormalArguments_Darwin_Or_64SVR4(SDValue Chain,
+      extendArgForPPC64(ISD::ArgFlagsTy Flags, EVT ObjectVT, SelectionDAG &DAG,
+                        SDValue ArgVal, DebugLoc dl) const;
+
+    void
+      setMinReservedArea(MachineFunction &MF, SelectionDAG &DAG,
+                         unsigned nAltivecParamsAtEnd,
+                         unsigned MinReservedArea, bool isPPC64) const;
+
+    SDValue
+      LowerFormalArguments_Darwin(SDValue Chain,
+                                  CallingConv::ID CallConv, bool isVarArg,
+                                  const SmallVectorImpl<ISD::InputArg> &Ins,
+                                  DebugLoc dl, SelectionDAG &DAG,
+                                  SmallVectorImpl<SDValue> &InVals) const;
+    SDValue
+      LowerFormalArguments_64SVR4(SDValue Chain,
                                   CallingConv::ID CallConv, bool isVarArg,
                                   const SmallVectorImpl<ISD::InputArg> &Ins,
                                   DebugLoc dl, SelectionDAG &DAG,
@@ -480,7 +509,21 @@ namespace llvm {
                                   SmallVectorImpl<SDValue> &InVals) const;
 
     SDValue
-      LowerCall_Darwin_Or_64SVR4(SDValue Chain, SDValue Callee,
+      createMemcpyOutsideCallSeq(SDValue Arg, SDValue PtrOff,
+                                 SDValue CallSeqStart, ISD::ArgFlagsTy Flags,
+                                 SelectionDAG &DAG, DebugLoc dl) const;
+
+    SDValue
+      LowerCall_Darwin(SDValue Chain, SDValue Callee,
+                       CallingConv::ID CallConv,
+                       bool isVarArg, bool isTailCall,
+                       const SmallVectorImpl<ISD::OutputArg> &Outs,
+                       const SmallVectorImpl<SDValue> &OutVals,
+                       const SmallVectorImpl<ISD::InputArg> &Ins,
+                       DebugLoc dl, SelectionDAG &DAG,
+                       SmallVectorImpl<SDValue> &InVals) const;
+    SDValue
+      LowerCall_64SVR4(SDValue Chain, SDValue Callee,
                        CallingConv::ID CallConv,
                        bool isVarArg, bool isTailCall,
                        const SmallVectorImpl<ISD::OutputArg> &Outs,

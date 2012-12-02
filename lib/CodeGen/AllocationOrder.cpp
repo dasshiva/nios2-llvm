@@ -15,9 +15,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "AllocationOrder.h"
-#include "VirtRegMap.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
+#include "llvm/CodeGen/VirtRegMap.h"
 
 using namespace llvm;
 
@@ -29,6 +29,7 @@ AllocationOrder::AllocationOrder(unsigned VirtReg,
   const TargetRegisterClass *RC = VRM.getRegInfo().getRegClass(VirtReg);
   std::pair<unsigned, unsigned> HintPair =
     VRM.getRegInfo().getRegAllocationHint(VirtReg);
+  const MachineRegisterInfo &MRI = VRM.getRegInfo();
 
   // HintPair.second is a register, phys or virt.
   Hint = HintPair.second;
@@ -41,7 +42,7 @@ AllocationOrder::AllocationOrder(unsigned VirtReg,
   if (HintPair.first) {
     const TargetRegisterInfo &TRI = VRM.getTargetRegInfo();
     // The remaining allocation order may depend on the hint.
-    ArrayRef<uint16_t> Order =
+    ArrayRef<MCPhysReg> Order =
       TRI.getRawAllocationOrder(RC, HintPair.first, Hint,
                                 VRM.getMachineFunction());
     if (Order.empty())
@@ -49,10 +50,10 @@ AllocationOrder::AllocationOrder(unsigned VirtReg,
 
     // Copy the allocation order with reserved registers removed.
     OwnedBegin = true;
-    unsigned *P = new unsigned[Order.size()];
+    MCPhysReg *P = new MCPhysReg[Order.size()];
     Begin = P;
     for (unsigned i = 0; i != Order.size(); ++i)
-      if (!RCI.isReserved(Order[i]))
+      if (!MRI.isReserved(Order[i]))
         *P++ = Order[i];
     End = P;
 
@@ -62,14 +63,14 @@ AllocationOrder::AllocationOrder(unsigned VirtReg,
   } else {
     // If there is no hint or just a normal hint, use the cached allocation
     // order from RegisterClassInfo.
-    ArrayRef<unsigned> O = RCI.getOrder(RC);
+    ArrayRef<MCPhysReg> O = RCI.getOrder(RC);
     Begin = O.begin();
     End = O.end();
   }
 
   // The hint must be a valid physreg for allocation.
   if (Hint && (!TargetRegisterInfo::isPhysicalRegister(Hint) ||
-               !RC->contains(Hint) || RCI.isReserved(Hint)))
+               !RC->contains(Hint) || MRI.isReserved(Hint)))
     Hint = 0;
 }
 

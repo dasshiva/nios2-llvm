@@ -92,6 +92,7 @@ namespace llvm {
     SDValue LowerSIGN_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
     SDValue getReturnAddressFrameIndex(SelectionDAG &DAG) const;
 
     TargetLowering::ConstraintType
@@ -169,7 +170,7 @@ namespace llvm {
                                             SelectionDAG &DAG) const;
 
     const MSP430Subtarget &Subtarget;
-    const TargetData *TD;
+    const DataLayout *TD;
   };
 } // namespace llvm
 

@@ -26,7 +26,7 @@
 namespace llvm {
 
   class CallSite;
-  class TargetData;
+  class DataLayout;
 
   namespace InlineConstants {
     // Various magic constants used to adjust heuristics.
@@ -104,13 +104,13 @@ namespace llvm {
 
   /// InlineCostAnalyzer - Cost analyzer used by inliner.
   class InlineCostAnalyzer {
-    // TargetData if available, or null.
-    const TargetData *TD;
+    // DataLayout if available, or null.
+    const DataLayout *TD;
 
   public:
     InlineCostAnalyzer(): TD(0) {}
 
-    void setTargetData(const TargetData *TData) { TD = TData; }
+    void setDataLayout(const DataLayout *TData) { TD = TData; }
 
     /// \brief Get an InlineCost object representing the cost of inlining this
     /// callsite.
@@ -120,15 +120,18 @@ namespace llvm {
     /// bound the computation necessary to determine whether the cost is
     /// sufficiently low to warrant inlining.
     InlineCost getInlineCost(CallSite CS, int Threshold);
-    /// getCalledFunction - The heuristic used to determine if we should inline
-    /// the function call or not.  The callee is explicitly specified, to allow
-    /// you to calculate the cost of inlining a function via a pointer.  This
-    /// behaves exactly as the version with no explicit callee parameter in all
-    /// other respects.
+
+    /// \brief Get an InlineCost with the callee explicitly specified.
+    /// This allows you to calculate the cost of inlining a function via a
+    /// pointer. This behaves exactly as the version with no explicit callee
+    /// parameter in all other respects.
     //
     //  Note: This is used by out-of-tree passes, please do not remove without
     //  adding a replacement API.
     InlineCost getInlineCost(CallSite CS, Function *Callee, int Threshold);
+
+    /// \brief Minimal filter to detect invalid constructs for inlining.
+    bool isInlineViable(Function &Callee);
   };
 }
 
