@@ -19,8 +19,8 @@
 #include "Nios2ISelLowering.h"
 #include "Nios2SelectionDAGInfo.h"
 #include "Nios2Subtarget.h"
+#include "llvm/DataLayout.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
@@ -29,7 +29,7 @@ class Nios2RegisterInfo;
 
 class Nios2TargetMachine : public LLVMTargetMachine {
   Nios2Subtarget       Subtarget;
-  const TargetData    DataLayout; // Calculates type size & alignment
+  const DataLayout    Layout; // Calculates type size & alignment
   const Nios2InstrInfo *InstrInfo;
   const Nios2FrameLowering *FrameLowering;
   Nios2TargetLowering  TLInfo;
@@ -49,8 +49,8 @@ public:
   { return FrameLowering; }
   virtual const Nios2Subtarget *getSubtargetImpl() const
   { return &Subtarget; }
-  virtual const TargetData *getTargetData()    const
-  { return &DataLayout;}
+  virtual const DataLayout *getDataLayout()    const
+  { return &Layout;}
 
   virtual const Nios2RegisterInfo *getRegisterInfo()  const {
     return &InstrInfo->getRegisterInfo();
