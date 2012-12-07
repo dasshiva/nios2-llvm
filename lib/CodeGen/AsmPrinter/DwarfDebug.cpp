@@ -16,34 +16,34 @@
 #include "DIE.h"
 #include "DwarfAccelTable.h"
 #include "DwarfCompileUnit.h"
-#include "llvm/Constants.h"
-#include "llvm/DebugInfo.h"
-#include "llvm/DIBuilder.h"
-#include "llvm/Module.h"
-#include "llvm/Instructions.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/Constants.h"
+#include "llvm/DIBuilder.h"
+#include "llvm/DataLayout.h"
+#include "llvm/DebugInfo.h"
+#include "llvm/Instructions.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/DataLayout.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetLoweringObjectFile.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetOptions.h"
-#include "llvm/ADT/Statistic.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/Triple.h"
+#include "llvm/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/ValueHandle.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/Timer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Timer.h"
+#include "llvm/Support/ValueHandle.h"
+#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 using namespace llvm;
 
 static cl::opt<bool> DisableDebugInfoPrinting("disable-debug-info-print",
@@ -156,7 +156,7 @@ DwarfDebug::DwarfDebug(AsmPrinter *A, Module *M)
   : Asm(A), MMI(Asm->MMI), FirstCU(0), FissionCU(0),
     AbbreviationsSet(InitAbbreviationsSetSize),
     SourceIdMap(DIEValueAllocator), StringPool(DIEValueAllocator),
-    PrevLabel(NULL) {
+    PrevLabel(NULL), GlobalCUIndexCount(0) {
   NextStringPoolNumber = 0;
 
   DwarfInfoSectionSym = DwarfAbbrevSectionSym = 0;
@@ -615,11 +615,13 @@ CompileUnit *DwarfDebug::constructCompileUnit(const MDNode *N) {
   DICompileUnit DIUnit(N);
   StringRef FN = DIUnit.getFilename();
   CompilationDir = DIUnit.getDirectory();
-  unsigned ID = getOrCreateSourceID(FN, CompilationDir);
+  // Call this to emit a .file directive if it wasn't emitted for the source
+  // file this CU comes from yet.
+  getOrCreateSourceID(FN, CompilationDir);
 
   DIE *Die = new DIE(dwarf::DW_TAG_compile_unit);
-  CompileUnit *NewCU = new CompileUnit(ID, DIUnit.getLanguage(), Die,
-                                       Asm, this);
+  CompileUnit *NewCU = new CompileUnit(GlobalCUIndexCount++,
+                                       DIUnit.getLanguage(), Die, Asm, this);
   NewCU->addString(Die, dwarf::DW_AT_producer, DIUnit.getProducer());
   NewCU->addUInt(Die, dwarf::DW_AT_language, dwarf::DW_FORM_data2,
                  DIUnit.getLanguage());
@@ -1509,7 +1511,9 @@ void DwarfDebug::beginFunction(const MachineFunction *MF) {
                                        MF->getFunction()->getContext());
     recordSourceLine(FnStartDL.getLine(), FnStartDL.getCol(),
                      FnStartDL.getScope(MF->getFunction()->getContext()),
-                     0);
+    // We'd like to list the prologue as "not statements" but GDB behaves
+    // poorly if we do that. Revisit this with caution/GDB (7.5+) testing.
+                     DWARF2_FLAG_IS_STMT);
   }
 }
 
@@ -1819,7 +1823,7 @@ void DwarfDebug::emitCompileUnits(const MCSection *Section) {
 
     // Emit the compile units header.
     Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("info_begin",
-                                                  TheCU->getID()));
+                                                  TheCU->getUniqueID()));
 
     // Emit size of content not including length itself
     unsigned ContentSize = Die->getSize() +
@@ -1838,7 +1842,8 @@ void DwarfDebug::emitCompileUnits(const MCSection *Section) {
     Asm->EmitInt8(Asm->getDataLayout().getPointerSize());
 
     emitDIE(Die);
-    Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("info_end", TheCU->getID()));
+    Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("info_end",
+                                                  TheCU->getUniqueID()));
   }
 }
 
@@ -2031,22 +2036,25 @@ void DwarfDebug::emitDebugPubTypes() {
       Asm->getObjFileLowering().getDwarfPubTypesSection());
     Asm->OutStreamer.AddComment("Length of Public Types Info");
     Asm->EmitLabelDifference(
-      Asm->GetTempSymbol("pubtypes_end", TheCU->getID()),
-      Asm->GetTempSymbol("pubtypes_begin", TheCU->getID()), 4);
+      Asm->GetTempSymbol("pubtypes_end", TheCU->getUniqueID()),
+      Asm->GetTempSymbol("pubtypes_begin", TheCU->getUniqueID()), 4);
 
     Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("pubtypes_begin",
-                                                  TheCU->getID()));
+                                                  TheCU->getUniqueID()));
 
     if (Asm->isVerbose()) Asm->OutStreamer.AddComment("DWARF Version");
     Asm->EmitInt16(dwarf::DWARF_VERSION);
 
     Asm->OutStreamer.AddComment("Offset of Compilation Unit Info");
-    Asm->EmitSectionOffset(Asm->GetTempSymbol("info_begin", TheCU->getID()),
+    Asm->EmitSectionOffset(Asm->GetTempSymbol("info_begin",
+                                              TheCU->getUniqueID()),
                            DwarfInfoSectionSym);
 
     Asm->OutStreamer.AddComment("Compilation Unit Length");
-    Asm->EmitLabelDifference(Asm->GetTempSymbol("info_end", TheCU->getID()),
-                             Asm->GetTempSymbol("info_begin", TheCU->getID()),
+    Asm->EmitLabelDifference(Asm->GetTempSymbol("info_end",
+                                                TheCU->getUniqueID()),
+                             Asm->GetTempSymbol("info_begin",
+                                                TheCU->getUniqueID()),
                              4);
 
     const StringMap<DIE*> &Globals = TheCU->getGlobalTypes();
@@ -2066,7 +2074,7 @@ void DwarfDebug::emitDebugPubTypes() {
     Asm->OutStreamer.AddComment("End Mark");
     Asm->EmitInt32(0);
     Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("pubtypes_end",
-                                                  TheCU->getID()));
+                                                  TheCU->getUniqueID()));
   }
 }
 
@@ -2317,11 +2325,10 @@ CompileUnit *DwarfDebug::constructFissionCU(const MDNode *N) {
   DICompileUnit DIUnit(N);
   StringRef FN = DIUnit.getFilename();
   CompilationDir = DIUnit.getDirectory();
-  unsigned ID = getOrCreateSourceID(FN, CompilationDir);
 
   DIE *Die = new DIE(dwarf::DW_TAG_compile_unit);
-  CompileUnit *NewCU = new CompileUnit(ID, DIUnit.getLanguage(), Die,
-                                       Asm, this);
+  CompileUnit *NewCU = new CompileUnit(GlobalCUIndexCount++,
+                                       DIUnit.getLanguage(), Die, Asm, this);
   // FIXME: This should be the .dwo file.
   NewCU->addString(Die, dwarf::DW_AT_GNU_dwo_name, FN);
 
@@ -2350,7 +2357,7 @@ void DwarfDebug::emitFissionSkeletonCU(const MCSection *Section) {
 
   // Emit the compile units header.
   Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("skel_info_begin",
-                                                FissionCU->getID()));
+                                                FissionCU->getUniqueID()));
 
   // Emit size of content not including length itself
   unsigned ContentSize = Die->getSize() +
@@ -2369,7 +2376,8 @@ void DwarfDebug::emitFissionSkeletonCU(const MCSection *Section) {
   Asm->EmitInt8(Asm->getDataLayout().getPointerSize());
 
   emitDIE(Die);
-  Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("skel_info_end", FissionCU->getID()));
+  Asm->OutStreamer.EmitLabel(Asm->GetTempSymbol("skel_info_end",
+                                                FissionCU->getUniqueID()));
 
 
 }

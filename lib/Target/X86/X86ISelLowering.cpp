@@ -14,20 +14,16 @@
 
 #define DEBUG_TYPE "x86-isel"
 #include "X86ISelLowering.h"
+#include "Utils/X86ShuffleDecode.h"
 #include "X86.h"
 #include "X86InstrBuilder.h"
 #include "X86TargetMachine.h"
 #include "X86TargetObjectFile.h"
-#include "Utils/X86ShuffleDecode.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/VariadicFunction.h"
 #include "llvm/CallingConv.h"
-#include "llvm/Constants.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/GlobalAlias.h"
-#include "llvm/GlobalVariable.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/LLVMContext.h"
 #include "llvm/CodeGen/IntrinsicLowering.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -35,14 +31,18 @@
 #include "llvm/CodeGen/MachineJumpTableInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/Constants.h"
+#include "llvm/DerivedTypes.h"
+#include "llvm/Function.h"
+#include "llvm/GlobalAlias.h"
+#include "llvm/GlobalVariable.h"
+#include "llvm/Instructions.h"
+#include "llvm/Intrinsics.h"
+#include "llvm/LLVMContext.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/Statistic.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/VariadicFunction.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -3252,9 +3252,7 @@ static bool isUndefOrInRange(int Val, int Low, int Hi) {
 /// isUndefOrEqual - Val is either less than zero (undef) or equal to the
 /// specified value.
 static bool isUndefOrEqual(int Val, int CmpVal) {
-  if (Val < 0 || Val == CmpVal)
-    return true;
-  return false;
+  return (Val < 0 || Val == CmpVal);
 }
 
 /// isSequentialOrUndefInRange - Return true if every element in Mask, beginning
@@ -5641,64 +5639,53 @@ LowerVECTOR_SHUFFLEtoBlend(ShuffleVectorSDNode *SVOp,
   SDValue V1 = SVOp->getOperand(0);
   SDValue V2 = SVOp->getOperand(1);
   DebugLoc dl = SVOp->getDebugLoc();
-  MVT VT = SVOp->getValueType(0).getSimpleVT();
+  EVT VT = SVOp->getValueType(0);
+  EVT EltVT = VT.getVectorElementType();
   unsigned NumElems = VT.getVectorNumElements();
 
-  if (!Subtarget->hasSSE41())
+  if (!Subtarget->hasSSE41() || EltVT == MVT::i8)
+    return SDValue();
+  if (!Subtarget->hasInt256() && VT == MVT::v16i16)
     return SDValue();
 
-  unsigned ISDNo = 0;
-  MVT OpTy;
+  // Check the mask for BLEND and build the value.
+  unsigned MaskValue = 0;
+  // There are 2 lanes if (NumElems > 8), and 1 lane otherwise.
+  unsigned NumLanes = (NumElems-1)/8 + 1; 
+  unsigned NumElemsInLane = NumElems / NumLanes;
 
-  switch (VT.SimpleTy) {
-  default: return SDValue();
-  case MVT::v8i16:
-    ISDNo = X86ISD::BLENDPW;
-    OpTy = MVT::v8i16;
-    break;
-  case MVT::v4i32:
-  case MVT::v4f32:
-    ISDNo = X86ISD::BLENDPS;
-    OpTy = MVT::v4f32;
-    break;
-  case MVT::v2i64:
-  case MVT::v2f64:
-    ISDNo = X86ISD::BLENDPD;
-    OpTy = MVT::v2f64;
-    break;
-  case MVT::v8i32:
-  case MVT::v8f32:
-    if (!Subtarget->hasFp256())
-      return SDValue();
-    ISDNo = X86ISD::BLENDPS;
-    OpTy = MVT::v8f32;
-    break;
-  case MVT::v4i64:
-  case MVT::v4f64:
-    if (!Subtarget->hasFp256())
-      return SDValue();
-    ISDNo = X86ISD::BLENDPD;
-    OpTy = MVT::v4f64;
-    break;
-  }
-  assert(ISDNo && "Invalid Op Number");
+  // Blend for v16i16 should be symetric for the both lanes.
+  for (unsigned i = 0; i < NumElemsInLane; ++i) {
 
-  unsigned MaskVals = 0;
-
-  for (unsigned i = 0; i != NumElems; ++i) {
+    int SndLaneEltIdx = (NumLanes == 2) ? 
+      SVOp->getMaskElt(i + NumElemsInLane) : -1;
     int EltIdx = SVOp->getMaskElt(i);
-    if (EltIdx == (int)i || EltIdx < 0)
-      MaskVals |= (1<<i);
-    else if (EltIdx == (int)(i + NumElems))
-      continue; // Bit is set to zero;
-    else
+
+    if ((EltIdx == -1 || EltIdx == (int)i) && 
+        (SndLaneEltIdx == -1 || SndLaneEltIdx == (int)(i + NumElemsInLane)))
+      continue;
+
+    if (((unsigned)EltIdx == (i + NumElems)) && 
+        (SndLaneEltIdx == -1 || 
+         (unsigned)SndLaneEltIdx == i + NumElems + NumElemsInLane))
+      MaskValue |= (1<<i);
+    else 
       return SDValue();
   }
 
-  V1 = DAG.getNode(ISD::BITCAST, dl, OpTy, V1);
-  V2 = DAG.getNode(ISD::BITCAST, dl, OpTy, V2);
-  SDValue Ret =  DAG.getNode(ISDNo, dl, OpTy, V1, V2,
-                             DAG.getConstant(MaskVals, MVT::i32));
+  // Convert i32 vectors to floating point if it is not AVX2.
+  // AVX2 introduced VPBLENDD instruction for 128 and 256-bit vectors.
+  EVT BlendVT = VT;
+  if (EltVT == MVT::i64 || (EltVT == MVT::i32 && !Subtarget->hasInt256())) {
+    BlendVT = EVT::getVectorVT(*DAG.getContext(), 
+                              EVT::getFloatingPointVT(EltVT.getSizeInBits()), 
+                              NumElems);
+    V1 = DAG.getNode(ISD::BITCAST, dl, VT, V1);
+    V2 = DAG.getNode(ISD::BITCAST, dl, VT, V2);
+  }
+  
+  SDValue Ret =  DAG.getNode(X86ISD::BLENDI, dl, BlendVT, V1, V2,
+                             DAG.getConstant(MaskValue, MVT::i32));
   return DAG.getNode(ISD::BITCAST, dl, VT, Ret);
 }
 
@@ -6471,23 +6458,6 @@ static bool MayFoldVectorLoad(SDValue V) {
   return MayFoldLoad(V);
 }
 
-// FIXME: the version above should always be used. Since there's
-// a bug where several vector shuffles can't be folded because the
-// DAG is not updated during lowering and a node claims to have two
-// uses while it only has one, use this version, and let isel match
-// another instruction if the load really happens to have more than
-// one use. Remove this version after this bug get fixed.
-// rdar://8434668, PR8156
-static bool RelaxedMayFoldVectorLoad(SDValue V) {
-  if (V.hasOneUse() && V.getOpcode() == ISD::BITCAST)
-    V = V.getOperand(0);
-  if (V.hasOneUse() && V.getOpcode() == ISD::SCALAR_TO_VECTOR)
-    V = V.getOperand(0);
-  if (ISD::isNormalLoad(V.getNode()))
-    return true;
-  return false;
-}
-
 static
 SDValue getMOVDDup(SDValue &Op, DebugLoc &dl, SDValue V1, SelectionDAG &DAG) {
   EVT VT = Op.getValueType();
@@ -6791,7 +6761,7 @@ X86TargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const {
     return getTargetShuffleNode(X86ISD::UNPCKH, dl, VT, V1, V1, DAG);
 
   if (isMOVDDUPMask(M, VT) && Subtarget->hasSSE3() &&
-      V2IsUndef && RelaxedMayFoldVectorLoad(V1))
+      V2IsUndef && MayFoldVectorLoad(V1))
     return getMOVDDup(Op, dl, V1, DAG);
 
   if (isMOVHLPS_v_undef_Mask(M, VT))
@@ -6811,11 +6781,12 @@ X86TargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const {
 
     unsigned TargetMask = getShuffleSHUFImmediate(SVOp);
 
-    if (HasFp256 && (VT == MVT::v4f32 || VT == MVT::v2f64))
-      return getTargetShuffleNode(X86ISD::VPERMILP, dl, VT, V1, TargetMask, DAG);
-
     if (HasSSE2 && (VT == MVT::v4f32 || VT == MVT::v4i32))
       return getTargetShuffleNode(X86ISD::PSHUFD, dl, VT, V1, TargetMask, DAG);
+
+    if (HasFp256 && (VT == MVT::v4f32 || VT == MVT::v2f64))
+      return getTargetShuffleNode(X86ISD::VPERMILP, dl, VT, V1, TargetMask,
+                                  DAG);
 
     return getTargetShuffleNode(X86ISD::SHUFP, dl, VT, V1, V1,
                                 TargetMask, DAG);
@@ -8918,6 +8889,11 @@ SDValue X86TargetLowering::ConvertCmpIfNecessary(SDValue Cmp,
   return DAG.getNode(X86ISD::SAHF, dl, MVT::i32, TruncSrl);
 }
 
+static bool isAllOnes(SDValue V) {
+  ConstantSDNode *C = dyn_cast<ConstantSDNode>(V);
+  return C && C->isAllOnesValue();
+}
+
 /// LowerToBT - Result of 'and' is compared against zero. Turn it into a BT node
 /// if it's possible.
 SDValue X86TargetLowering::LowerToBT(SDValue And, ISD::CondCode CC,
@@ -8966,6 +8942,14 @@ SDValue X86TargetLowering::LowerToBT(SDValue And, ISD::CondCode CC,
   }
 
   if (LHS.getNode()) {
+    // If the LHS is of the form (x ^ -1) then replace the LHS with x and flip
+    // the condition code later.
+    bool Invert = false;
+    if (LHS.getOpcode() == ISD::XOR && isAllOnes(LHS.getOperand(1))) {
+      Invert = true;
+      LHS = LHS.getOperand(0);
+    }
+
     // If LHS is i8, promote it to i32 with any_extend.  There is no i8 BT
     // instruction.  Since the shift amount is in-range-or-undefined, we know
     // that doing a bittest on the i32 value is ok.  We extend to i32 because
@@ -8981,7 +8965,10 @@ SDValue X86TargetLowering::LowerToBT(SDValue And, ISD::CondCode CC,
       RHS = DAG.getNode(ISD::ANY_EXTEND, dl, LHS.getValueType(), RHS);
 
     SDValue BT = DAG.getNode(X86ISD::BT, dl, MVT::i32, LHS, RHS);
-    unsigned Cond = CC == ISD::SETEQ ? X86::COND_AE : X86::COND_B;
+    X86::CondCode Cond = CC == ISD::SETEQ ? X86::COND_AE : X86::COND_B;
+    // Flip the condition if the LHS was a not instruction
+    if (Invert)
+      Cond = X86::GetOppositeBranchCondition(Cond);
     return DAG.getNode(X86ISD::SETCC, dl, MVT::i8,
                        DAG.getConstant(Cond, MVT::i8), BT);
   }
@@ -9237,11 +9224,6 @@ static bool isX86LogicalCmp(SDValue Op) {
 static bool isZero(SDValue V) {
   ConstantSDNode *C = dyn_cast<ConstantSDNode>(V);
   return C && C->isNullValue();
-}
-
-static bool isAllOnes(SDValue V) {
-  ConstantSDNode *C = dyn_cast<ConstantSDNode>(V);
-  return C && C->isAllOnesValue();
 }
 
 static bool isTruncWithZeroHighBitsInput(SDValue V, SelectionDAG &DAG) {
@@ -11961,9 +11943,7 @@ const char *X86TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case X86ISD::ANDNP:              return "X86ISD::ANDNP";
   case X86ISD::PSIGN:              return "X86ISD::PSIGN";
   case X86ISD::BLENDV:             return "X86ISD::BLENDV";
-  case X86ISD::BLENDPW:            return "X86ISD::BLENDPW";
-  case X86ISD::BLENDPS:            return "X86ISD::BLENDPS";
-  case X86ISD::BLENDPD:            return "X86ISD::BLENDPD";
+  case X86ISD::BLENDI:             return "X86ISD::BLENDI";
   case X86ISD::HADD:               return "X86ISD::HADD";
   case X86ISD::HSUB:               return "X86ISD::HSUB";
   case X86ISD::FHADD:              return "X86ISD::FHADD";
@@ -12161,6 +12141,30 @@ bool X86TargetLowering::isZExtFree(Type *Ty1, Type *Ty2) const {
 bool X86TargetLowering::isZExtFree(EVT VT1, EVT VT2) const {
   // x86-64 implicitly zero-extends 32-bit results in 64-bit registers.
   return VT1 == MVT::i32 && VT2 == MVT::i64 && Subtarget->is64Bit();
+}
+
+bool X86TargetLowering::isZExtFree(SDValue Val, EVT VT2) const {
+  EVT VT1 = Val.getValueType();
+  if (isZExtFree(VT1, VT2))
+    return true;
+
+  if (Val.getOpcode() != ISD::LOAD)
+    return false;
+
+  if (!VT1.isSimple() || !VT1.isInteger() ||
+      !VT2.isSimple() || !VT2.isInteger())
+    return false;
+
+  switch (VT1.getSimpleVT().SimpleTy) {
+  default: break;
+  case MVT::i8:
+  case MVT::i16:
+  case MVT::i32:
+    // X86 has 8, 16, and 32-bit zero-extending loads.
+    return true;
+  }
+
+  return false;
 }
 
 bool X86TargetLowering::isNarrowingProfitable(EVT VT1, EVT VT2) const {

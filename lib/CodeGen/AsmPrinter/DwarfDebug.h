@@ -15,15 +15,15 @@
 #define CODEGEN_ASMPRINTER_DWARFDEBUG_H__
 
 #include "DIE.h"
-#include "llvm/DebugInfo.h"
-#include "llvm/CodeGen/AsmPrinter.h"
-#include "llvm/CodeGen/LexicalScopes.h"
-#include "llvm/MC/MachineLocation.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/LexicalScopes.h"
+#include "llvm/DebugInfo.h"
+#include "llvm/MC/MachineLocation.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/DebugLoc.h"
 
@@ -315,6 +315,9 @@ class DwarfDebug {
   // Holders for the various debug information flags that we might need to
   // have exposed. See accessor functions below for description.
   bool IsDarwinGDBCompat;
+
+  // Counter for assigning globally unique IDs for CUs.
+  unsigned GlobalCUIndexCount;
 
   // DWARF5 Experimental Options
   bool HasDwarfAccelTables;

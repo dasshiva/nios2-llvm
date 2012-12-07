@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/PPCFixupKinds.h"
 #include "MCTargetDesc/PPCMCTargetDesc.h"
+#include "MCTargetDesc/PPCFixupKinds.h"
 #include "llvm/MC/MCELFObjectWriter.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCValue.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
 
@@ -119,7 +119,13 @@ unsigned PPCELFObjectWriter::getRelocTypeInner(const MCValue &Target,
       case MCSymbolRefExpr::VK_PPC_TOC16_LO:
         Type = ELF::R_PPC64_TOC16_LO_DS;
         break;
+      case MCSymbolRefExpr::VK_PPC_GOT_TPREL16_DS:
+        Type = ELF::R_PPC64_GOT_TPREL16_DS;
+        break;
       }
+      break;
+    case PPC::fixup_ppc_tlsreg:
+      Type = ELF::R_PPC64_TLS;
       break;
     case FK_Data_8:
       switch (Modifier) {

@@ -17,15 +17,15 @@
 #include "X86MachineFunctionInfo.h"
 #include "X86Subtarget.h"
 #include "X86TargetMachine.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/LLVMContext.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/LiveVariables.h"
+#include "llvm/DerivedTypes.h"
+#include "llvm/LLVMContext.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/Support/CommandLine.h"
@@ -1551,16 +1551,19 @@ X86InstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
   case X86::MOVUPSrm:
   case X86::MOVAPDrm:
   case X86::MOVDQArm:
+  case X86::MOVDQUrm:
   case X86::VMOVSSrm:
   case X86::VMOVSDrm:
   case X86::VMOVAPSrm:
   case X86::VMOVUPSrm:
   case X86::VMOVAPDrm:
   case X86::VMOVDQArm:
+  case X86::VMOVDQUrm:
   case X86::VMOVAPSYrm:
   case X86::VMOVUPSYrm:
   case X86::VMOVAPDYrm:
   case X86::VMOVDQAYrm:
+  case X86::VMOVDQUYrm:
   case X86::MMX_MOVD64rm:
   case X86::MMX_MOVQ64rm:
   case X86::FsVMOVAPSrm:

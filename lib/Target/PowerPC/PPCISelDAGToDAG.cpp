@@ -14,23 +14,23 @@
 
 #define DEBUG_TYPE "ppc-codegen"
 #include "PPC.h"
-#include "PPCTargetMachine.h"
 #include "MCTargetDesc/PPCPredicates.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "PPCTargetMachine.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
-#include "llvm/Target/TargetOptions.h"
 #include "llvm/Constants.h"
 #include "llvm/Function.h"
 #include "llvm/GlobalValue.h"
 #include "llvm/GlobalVariable.h"
 #include "llvm/Intrinsics.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetOptions.h"
 using namespace llvm;
 
 namespace {
@@ -1310,6 +1310,11 @@ SDNode *PPCDAGToDAGISel::Select(SDNode *N) {
 
     return CurDAG->getMachineNode(PPC::ADDItocL, dl, MVT::i64,
                                   SDValue(Tmp, 0), GA);
+  }
+  case PPCISD::LD_GOT_TPREL: {
+    assert (PPCSubTarget.isPPC64() && "Only supported for 64-bit ABI");
+    return CurDAG->getMachineNode(PPC::LDgotTPREL, dl, MVT::i64, 
+                                  N->getOperand(0), N->getOperand(1));
   }
   }
 

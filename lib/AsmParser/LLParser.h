@@ -15,14 +15,14 @@
 #define LLVM_ASMPARSER_LLPARSER_H
 
 #include "LLLexer.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Attributes.h"
 #include "llvm/Instructions.h"
 #include "llvm/Module.h"
 #include "llvm/Operator.h"
-#include "llvm/Type.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/ValueHandle.h"
+#include "llvm/Type.h"
 #include <map>
 
 namespace llvm {
@@ -191,7 +191,9 @@ namespace llvm {
     bool ParseTLSModel(GlobalVariable::ThreadLocalMode &TLM);
     bool ParseOptionalThreadLocal(GlobalVariable::ThreadLocalMode &TLM);
     bool ParseOptionalAddrSpace(unsigned &AddrSpace);
-    bool ParseOptionalAttrs(AttrBuilder &Attrs, unsigned AttrKind);
+    bool ParseOptionalFuncAttrs(AttrBuilder &B);
+    bool ParseOptionalParamAttrs(AttrBuilder &B);
+    bool ParseOptionalReturnAttrs(AttrBuilder &B);
     bool ParseOptionalLinkage(unsigned &Linkage, bool &HasLinkage);
     bool ParseOptionalLinkage(unsigned &Linkage) {
       bool HasLinkage; return ParseOptionalLinkage(Linkage, HasLinkage);

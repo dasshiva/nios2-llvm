@@ -13,18 +13,18 @@
 
 
 #include "llvm/PassManagers.h"
-#include "llvm/PassManager.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Assembly/Writer.h"
+#include "llvm/Module.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Timer.h"
-#include "llvm/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/PassNameParser.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Mutex.h"
+#include "llvm/Support/PassNameParser.h"
+#include "llvm/Support/Timer.h"
+#include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 #include <map>
 using namespace llvm;
@@ -309,6 +309,9 @@ public:
   /// whether any of the passes modifies the module, and if so, return true.
   bool runOnModule(Module &M);
 
+  using llvm::Pass::doInitialization;
+  using llvm::Pass::doFinalization;
+
   /// doInitialization - Run all of the initializers for the module passes.
   ///
   bool doInitialization();
@@ -402,6 +405,9 @@ public:
   /// whether any of the passes modifies the module, and if so, return true.
   bool run(Module &M);
 
+  using llvm::Pass::doInitialization;
+  using llvm::Pass::doFinalization;
+
   /// doInitialization - Run all of the initializers for the module passes.
   ///
   bool doInitialization();
@@ -444,7 +450,7 @@ namespace {
 static ManagedStatic<sys::SmartMutex<true> > TimingInfoMutex;
 
 class TimingInfo {
-  DenseMap<AnalysisID, Timer*> TimingData;
+  DenseMap<Pass*, Timer*> TimingData;
   TimerGroup TG;
 public:
   // Use 'create' member to get this.
@@ -454,7 +460,7 @@ public:
   ~TimingInfo() {
     // Delete all of the timers, which accumulate their info into the
     // TimerGroup.
-    for (DenseMap<AnalysisID, Timer*>::iterator I = TimingData.begin(),
+    for (DenseMap<Pass*, Timer*>::iterator I = TimingData.begin(),
          E = TimingData.end(); I != E; ++I)
       delete I->second;
     // TimerGroup is deleted next, printing the report.
@@ -471,7 +477,7 @@ public:
       return 0;
 
     sys::SmartScopedLock<true> Lock(*TimingInfoMutex);
-    Timer *&T = TimingData[P->getPassID()];
+    Timer *&T = TimingData[P];
     if (T == 0)
       T = new Timer(P->getPassName(), TG);
     return T;
@@ -1327,7 +1333,7 @@ bool BBPassManager::doInitialization(Module &M) {
 bool BBPassManager::doFinalization(Module &M) {
   bool Changed = false;
 
-  for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index)
+  for (int Index = getNumContainedPasses() - 1; Index >= 0; --Index)
     Changed |= getContainedPass(Index)->doFinalization(M);
 
   return Changed;
@@ -1417,6 +1423,12 @@ bool FunctionPassManagerImpl::doInitialization(Module &M) {
   dumpArguments();
   dumpPasses();
 
+  SmallVectorImpl<ImmutablePass *>& IPV = getImmutablePasses();
+  for (SmallVectorImpl<ImmutablePass *>::const_iterator I = IPV.begin(),
+       E = IPV.end(); I != E; ++I) {
+    Changed |= (*I)->doInitialization(M);
+  }
+
   for (unsigned Index = 0; Index < getNumContainedManagers(); ++Index)
     Changed |= getContainedManager(Index)->doInitialization(M);
 
@@ -1426,8 +1438,14 @@ bool FunctionPassManagerImpl::doInitialization(Module &M) {
 bool FunctionPassManagerImpl::doFinalization(Module &M) {
   bool Changed = false;
 
-  for (unsigned Index = 0; Index < getNumContainedManagers(); ++Index)
+  for (int Index = getNumContainedManagers() - 1; Index >= 0; --Index)
     Changed |= getContainedManager(Index)->doFinalization(M);
+
+  SmallVectorImpl<ImmutablePass *>& IPV = getImmutablePasses();
+  for (SmallVectorImpl<ImmutablePass *>::const_iterator I = IPV.begin(),
+       E = IPV.end(); I != E; ++I) {
+    Changed |= (*I)->doFinalization(M);
+  }
 
   return Changed;
 }
@@ -1547,8 +1565,8 @@ bool FPPassManager::doInitialization(Module &M) {
 
 bool FPPassManager::doFinalization(Module &M) {
   bool Changed = false;
- 
-  for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index)
+
+  for (int Index = getNumContainedPasses() - 1; Index >= 0; --Index)
     Changed |= getContainedPass(Index)->doFinalization(M);
   
   return Changed;
@@ -1605,7 +1623,7 @@ MPPassManager::runOnModule(Module &M) {
   }
 
   // Finalize module passes
-  for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index)
+  for (int Index = getNumContainedPasses() - 1; Index >= 0; --Index)
     Changed |= getContainedPass(Index)->doFinalization(M);
 
   // Finalize on-the-fly passes
@@ -1676,9 +1694,21 @@ bool PassManagerImpl::run(Module &M) {
   dumpArguments();
   dumpPasses();
 
+  SmallVectorImpl<ImmutablePass *>& IPV = getImmutablePasses();
+  for (SmallVectorImpl<ImmutablePass *>::const_iterator I = IPV.begin(),
+       E = IPV.end(); I != E; ++I) {
+    Changed |= (*I)->doInitialization(M);
+  }
+
   initializeAllAnalysisInfo();
   for (unsigned Index = 0; Index < getNumContainedManagers(); ++Index)
     Changed |= getContainedManager(Index)->runOnModule(M);
+
+  for (SmallVectorImpl<ImmutablePass *>::const_iterator I = IPV.begin(),
+       E = IPV.end(); I != E; ++I) {
+    Changed |= (*I)->doFinalization(M);
+  }
+
   return Changed;
 }
 

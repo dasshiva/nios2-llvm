@@ -22,14 +22,14 @@
 #ifndef LLVM_TARGET_TARGETLOWERING_H
 #define LLVM_TARGET_TARGETLOWERING_H
 
-#include "llvm/AddressingMode.h"
-#include "llvm/CallingConv.h"
-#include "llvm/InlineAsm.h"
-#include "llvm/Attributes.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/Support/CallSite.h"
-#include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/AddressingMode.h"
+#include "llvm/Attributes.h"
+#include "llvm/CallingConv.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
+#include "llvm/InlineAsm.h"
+#include "llvm/Support/CallSite.h"
 #include "llvm/Support/DebugLoc.h"
 #include "llvm/Target/TargetCallingConv.h"
 #include "llvm/Target/TargetMachine.h"
@@ -1711,6 +1711,13 @@ public:
 
   virtual bool isZExtFree(EVT /*VT1*/, EVT /*VT2*/) const {
     return false;
+  }
+
+  /// isZExtFree - Return true if zero-extending the specific node Val to type
+  /// VT2 is free (either because it's implicitly zero-extended such as ARM
+  /// ldrb / ldrh or because it's folded such as X86 zero-extending loads).
+  virtual bool isZExtFree(SDValue Val, EVT VT2) const {
+    return isZExtFree(Val.getValueType(), VT2);
   }
 
   /// isFNegFree - Return true if an fneg operation is free to the point where

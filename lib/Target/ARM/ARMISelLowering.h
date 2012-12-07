@@ -17,11 +17,11 @@
 
 #include "ARM.h"
 #include "ARMSubtarget.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/FastISel.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/CallingConvLower.h"
+#include "llvm/Target/TargetLowering.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 #include <vector>
 
 namespace llvm {
@@ -293,6 +293,9 @@ namespace llvm {
                                     bool IsZeroVal,
                                     bool MemcpyStrSrc,
                                     MachineFunction &MF) const;
+
+    using TargetLowering::isZExtFree;
+    virtual bool isZExtFree(SDValue Val, EVT VT2) const;
 
     /// isLegalAddressingMode - Return true if the addressing mode represented
     /// by AM is legal for this target, for a load/store of the specified type.

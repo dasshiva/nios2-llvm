@@ -13,16 +13,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo.h"
-#include "llvm/Constants.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/IntrinsicInst.h"
-#include "llvm/Instructions.h"
-#include "llvm/Module.h"
-#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Constants.h"
+#include "llvm/DerivedTypes.h"
+#include "llvm/Instructions.h"
+#include "llvm/IntrinsicInst.h"
+#include "llvm/Intrinsics.h"
+#include "llvm/Module.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Dwarf.h"
 #include "llvm/Support/raw_ostream.h"
@@ -71,6 +71,18 @@ uint64_t DIDescriptor::getUInt64Field(unsigned Elt) const {
     if (ConstantInt *CI
         = dyn_cast_or_null<ConstantInt>(DbgNode->getOperand(Elt)))
       return CI->getZExtValue();
+
+  return 0;
+}
+
+int64_t DIDescriptor::getInt64Field(unsigned Elt) const {
+  if (DbgNode == 0)
+    return 0;
+
+  if (Elt < DbgNode->getNumOperands())
+    if (ConstantInt *CI
+        = dyn_cast_or_null<ConstantInt>(DbgNode->getOperand(Elt)))
+      return CI->getSExtValue();
 
   return 0;
 }
@@ -1037,7 +1049,11 @@ void DIDescriptor::print(raw_ostream &OS) const {
 }
 
 void DISubrange::printInternal(raw_ostream &OS) const {
-  OS << " [" << getLo() << ", " << getHi() << ']';
+  int64_t Count = getCount();
+  if (Count != -1)
+    OS << " [" << getLo() << ", " << Count - 1 << ']';
+  else
+    OS << " [unbounded]";
 }
 
 void DIScope::printInternal(raw_ostream &OS) const {

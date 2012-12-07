@@ -15,9 +15,9 @@
 #define ARMSUBTARGET_H
 
 #include "MCTargetDesc/ARMMCTargetDesc.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
-#include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/MC/MCInstrItineraries.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <string>
 
 #define GET_SUBTARGETINFO_HEADER
@@ -244,7 +244,7 @@ protected:
   bool isTargetIOS() const { return TargetTriple.getOS() == Triple::IOS; }
   bool isTargetDarwin() const { return TargetTriple.isOSDarwin(); }
   bool isTargetNaCl() const {
-    return TargetTriple.getOS() == Triple::NativeClient;
+    return TargetTriple.getOS() == Triple::NaCl;
   }
   bool isTargetELF() const { return !isTargetDarwin(); }
 

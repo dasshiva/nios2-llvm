@@ -47,31 +47,28 @@
 
 #define DEBUG_TYPE "msan"
 
+#include "llvm/Transforms/Instrumentation.h"
 #include "BlackList.h"
-#include "llvm/DataLayout.h"
-#include "llvm/Function.h"
-#include "llvm/InlineAsm.h"
-#include "llvm/InstVisitor.h"
-#include "llvm/IntrinsicInst.h"
-#include "llvm/IRBuilder.h"
-#include "llvm/LLVMContext.h"
-#include "llvm/MDBuilder.h"
-#include "llvm/Module.h"
-#include "llvm/Type.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/ValueMap.h"
-#include "llvm/Transforms/Instrumentation.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/ModuleUtils.h"
+#include "llvm/DataLayout.h"
+#include "llvm/Function.h"
+#include "llvm/IRBuilder.h"
+#include "llvm/InlineAsm.h"
+#include "llvm/InstVisitor.h"
+#include "llvm/IntrinsicInst.h"
+#include "llvm/LLVMContext.h"
+#include "llvm/MDBuilder.h"
+#include "llvm/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
+#include "llvm/Type.h"
 
 using namespace llvm;
 
@@ -105,6 +102,10 @@ static cl::opt<bool> ClHandleICmp("msan-handle-icmp",
        cl::desc("propagate shadow through ICmpEQ and ICmpNE"),
        cl::Hidden, cl::init(true));
 
+static cl::opt<bool> ClStoreCleanOrigin("msan-store-clean-origin",
+       cl::desc("store origin for clean (fully initialized) values"),
+       cl::Hidden, cl::init(false));
+
 // This flag controls whether we check the shadow of the address
 // operand of load or store. Such bugs are very rare, since load from
 // a garbage address typically results in SEGV, but still happen
@@ -132,13 +133,15 @@ namespace {
 /// uninitialized reads.
 class MemorySanitizer : public FunctionPass {
 public:
-  MemorySanitizer() : FunctionPass(ID), TD(0) { }
+  MemorySanitizer() : FunctionPass(ID), TD(0), WarningFn(0) { }
   const char *getPassName() const { return "MemorySanitizer"; }
   bool runOnFunction(Function &F);
   bool doInitialization(Module &M);
   static char ID;  // Pass identification, replacement for typeid.
 
 private:
+  void initializeCallbacks(Module &M);
+
   DataLayout *TD;
   LLVMContext *C;
   Type *IntptrTy;
@@ -181,6 +184,8 @@ private:
   uint64_t OriginOffset;
   /// \brief Branch weights for error reporting.
   MDNode *ColdCallWeights;
+  /// \brief Branch weights for origin store.
+  MDNode *OriginStoreWeights;
   /// \brief The blacklist.
   OwningPtr<BlackList> BL;
   /// \brief An empty volatile inline asm that prevents callback merge.
@@ -212,44 +217,14 @@ static GlobalVariable *createPrivateNonConstGlobalForString(Module &M,
                             GlobalValue::PrivateLinkage, StrConst, "");
 }
 
-/// \brief Module-level initialization.
-///
-/// Obtains pointers to the required runtime library functions, and
-/// inserts a call to __msan_init to the module's constructor list.
-bool MemorySanitizer::doInitialization(Module &M) {
-  TD = getAnalysisIfAvailable<DataLayout>();
-  if (!TD)
-    return false;
-  BL.reset(new BlackList(ClBlackListFile));
-  C = &(M.getContext());
-  unsigned PtrSize = TD->getPointerSizeInBits(/* AddressSpace */0);
-  switch (PtrSize) {
-    case 64:
-      ShadowMask = kShadowMask64;
-      OriginOffset = kOriginOffset64;
-      break;
-    case 32:
-      ShadowMask = kShadowMask32;
-      OriginOffset = kOriginOffset32;
-      break;
-    default:
-      report_fatal_error("unsupported pointer size");
-      break;
-  }
+
+/// \brief Insert extern declaration of runtime-provided functions and globals.
+void MemorySanitizer::initializeCallbacks(Module &M) {
+  // Only do this once.
+  if (WarningFn)
+    return;
 
   IRBuilder<> IRB(*C);
-  IntptrTy = IRB.getIntPtrTy(TD);
-  OriginTy = IRB.getInt32Ty();
-
-  ColdCallWeights = MDBuilder(*C).createBranchWeights(1, 1000);
-
-  // Insert a call to __msan_init/__msan_track_origins into the module's CTORs.
-  appendToGlobalCtors(M, cast<Function>(M.getOrInsertFunction(
-                      "__msan_init", IRB.getVoidTy(), NULL)), 0);
-
-  new GlobalVariable(M, IRB.getInt32Ty(), true, GlobalValue::LinkOnceODRLinkage,
-                     IRB.getInt32(ClTrackOrigins), "__msan_track_origins");
-
   // Create the callback.
   // FIXME: this function should have "Cold" calling conv,
   // which is not yet implemented.
@@ -308,6 +283,46 @@ bool MemorySanitizer::doInitialization(Module &M) {
   EmptyAsm = InlineAsm::get(FunctionType::get(IRB.getVoidTy(), false),
                             StringRef(""), StringRef(""),
                             /*hasSideEffects=*/true);
+}
+
+/// \brief Module-level initialization.
+///
+/// inserts a call to __msan_init to the module's constructor list.
+bool MemorySanitizer::doInitialization(Module &M) {
+  TD = getAnalysisIfAvailable<DataLayout>();
+  if (!TD)
+    return false;
+  BL.reset(new BlackList(ClBlackListFile));
+  C = &(M.getContext());
+  unsigned PtrSize = TD->getPointerSizeInBits(/* AddressSpace */0);
+  switch (PtrSize) {
+    case 64:
+      ShadowMask = kShadowMask64;
+      OriginOffset = kOriginOffset64;
+      break;
+    case 32:
+      ShadowMask = kShadowMask32;
+      OriginOffset = kOriginOffset32;
+      break;
+    default:
+      report_fatal_error("unsupported pointer size");
+      break;
+  }
+
+  IRBuilder<> IRB(*C);
+  IntptrTy = IRB.getIntPtrTy(TD);
+  OriginTy = IRB.getInt32Ty();
+
+  ColdCallWeights = MDBuilder(*C).createBranchWeights(1, 1000);
+  OriginStoreWeights = MDBuilder(*C).createBranchWeights(1, 1000);
+
+  // Insert a call to __msan_init/__msan_track_origins into the module's CTORs.
+  appendToGlobalCtors(M, cast<Function>(M.getOrInsertFunction(
+                      "__msan_init", IRB.getVoidTy(), NULL)), 0);
+
+  new GlobalVariable(M, IRB.getInt32Ty(), true, GlobalValue::WeakODRLinkage,
+                     IRB.getInt32(ClTrackOrigins), "__msan_track_origins");
+
   return true;
 }
 
@@ -374,6 +389,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     ShadowOriginAndInsertPoint() : Shadow(0), Origin(0), OrigIns(0) { }
   };
   SmallVector<ShadowOriginAndInsertPoint, 16> InstrumentationList;
+  SmallVector<Instruction*, 16> StoreList;
 
   MemorySanitizerVisitor(Function &F, MemorySanitizer &MS)
     : F(F), MS(MS), VAHelper(CreateVarArgHelper(F, MS, *this)) {
@@ -381,6 +397,50 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     DEBUG(if (!InsertChecks)
             dbgs() << "MemorySanitizer is not inserting checks into '"
                    << F.getName() << "'\n");
+  }
+
+  void materializeStores() {
+    for (size_t i = 0, n = StoreList.size(); i < n; i++) {
+      StoreInst& I = *dyn_cast<StoreInst>(StoreList[i]);
+
+      IRBuilder<> IRB(&I);
+      Value *Val = I.getValueOperand();
+      Value *Addr = I.getPointerOperand();
+      Value *Shadow = getShadow(Val);
+      Value *ShadowPtr = getShadowPtr(Addr, Shadow->getType(), IRB);
+
+      StoreInst *NewSI = IRB.CreateAlignedStore(Shadow, ShadowPtr, I.getAlignment());
+      DEBUG(dbgs() << "  STORE: " << *NewSI << "\n");
+      (void)NewSI;
+      // If the store is volatile, add a check.
+      if (I.isVolatile())
+        insertCheck(Val, &I);
+      if (ClCheckAccessAddress)
+        insertCheck(Addr, &I);
+
+      if (ClTrackOrigins) {
+        if (ClStoreCleanOrigin || isa<StructType>(Shadow->getType())) {
+          IRB.CreateAlignedStore(getOrigin(Val), getOriginPtr(Addr, IRB), I.getAlignment());
+        } else {
+          Value *ConvertedShadow = convertToShadowTyNoVec(Shadow, IRB);
+
+          Constant *Cst = dyn_cast_or_null<Constant>(ConvertedShadow);
+          // TODO(eugenis): handle non-zero constant shadow by inserting an
+          // unconditional check (can not simply fail compilation as this could
+          // be in the dead code).
+          if (Cst)
+            continue;
+
+          Value *Cmp = IRB.CreateICmpNE(ConvertedShadow,
+              getCleanShadow(ConvertedShadow), "_mscmp");
+          Instruction *CheckTerm =
+            SplitBlockAndInsertIfThen(cast<Instruction>(Cmp), false, MS.OriginStoreWeights);
+          IRBuilder<> IRBNewBlock(CheckTerm);
+          IRBNewBlock.CreateAlignedStore(getOrigin(Val),
+              getOriginPtr(Addr, IRBNewBlock), I.getAlignment());
+        }
+      }
+    }
   }
 
   void materializeChecks() {
@@ -414,6 +474,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
 
   /// \brief Add MemorySanitizer instrumentation to a function.
   bool runOnFunction() {
+    MS.initializeCallbacks(*F.getParent());
     if (!MS.TD) return false;
     // Iterate all BBs in depth-first order and create shadow instructions
     // for all instructions (where applicable).
@@ -439,6 +500,11 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
 
     VAHelper->finalizeInstrumentation();
 
+    // Delayed instrumentation of StoreInst.
+    // This may add new checks to be inserted later.
+    materializeStores();
+
+    // Insert shadow value checks.
     materializeChecks();
 
     return true;
@@ -729,23 +795,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   /// Optionally, checks that the store address is fully defined.
   /// Volatile stores check that the value being stored is fully defined.
   void visitStoreInst(StoreInst &I) {
-    IRBuilder<> IRB(&I);
-    Value *Val = I.getValueOperand();
-    Value *Addr = I.getPointerOperand();
-    Value *Shadow = getShadow(Val);
-    Value *ShadowPtr = getShadowPtr(Addr, Shadow->getType(), IRB);
-
-    StoreInst *NewSI = IRB.CreateAlignedStore(Shadow, ShadowPtr, I.getAlignment());
-    DEBUG(dbgs() << "  STORE: " << *NewSI << "\n");
-    (void)NewSI;
-    // If the store is volatile, add a check.
-    if (I.isVolatile())
-      insertCheck(Val, &I);
-    if (ClCheckAccessAddress)
-      insertCheck(Addr, &I);
-
-    if (ClTrackOrigins)
-      IRB.CreateAlignedStore(getOrigin(Val), getOriginPtr(Addr, IRB), I.getAlignment());
+    StoreList.push_back(&I);
   }
 
   // Vector manipulation.
@@ -1092,6 +1142,25 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     VAHelper->visitVACopyInst(I);
   }
 
+  void handleBswap(IntrinsicInst &I) {
+    IRBuilder<> IRB(&I);
+    Value *Op = I.getArgOperand(0);
+    Type *OpType = Op->getType();
+    Function *BswapFunc = Intrinsic::getDeclaration(
+      F.getParent(), Intrinsic::bswap, ArrayRef<Type*>(&OpType, 1));
+    setShadow(&I, IRB.CreateCall(BswapFunc, getShadow(Op)));
+    setOrigin(&I, getOrigin(Op));
+  }
+
+  void visitIntrinsicInst(IntrinsicInst &I) {
+    switch (I.getIntrinsicID()) {
+    case llvm::Intrinsic::bswap:
+      handleBswap(I); break;
+    default:
+      visitInstruction(I); break;
+    }
+  }
+
   void visitCallSite(CallSite CS) {
     Instruction &I = *CS.getInstruction();
     assert((CS.isCall() || CS.isInvoke()) && "Unknown type of CallSite");
@@ -1111,11 +1180,20 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       // will get propagated to a void RetVal.
       if (Call->isTailCall() && Call->getType() != Call->getParent()->getType())
         Call->setTailCall(false);
-      if (isa<IntrinsicInst>(&I)) {
-        // All intrinsics we care about are handled in corresponding visit*
-        // methods. Add checks for the arguments, mark retval as clean.
-        visitInstruction(I);
-        return;
+
+      assert(!isa<IntrinsicInst>(&I) && "intrinsics are handled elsewhere");
+
+      // We are going to insert code that relies on the fact that the callee
+      // will become a non-readonly function after it is instrumented by us. To
+      // prevent this code from being optimized out, mark that function
+      // non-readonly in advance.
+      if (Function *Func = Call->getCalledFunction()) {
+        // Clear out readonly/readnone attributes.
+        AttrBuilder B;
+        B.addAttribute(Attributes::ReadOnly)
+          .addAttribute(Attributes::ReadNone);
+        Func->removeAttribute(AttrListPtr::FunctionIndex,
+                              Attributes::get(Func->getContext(), B));
       }
     }
     IRBuilder<> IRB(&I);
