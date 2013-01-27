@@ -24,6 +24,9 @@ namespace {
     /// @name MCStreamer Interface
     /// @{
 
+    virtual void InitToTextSection() {
+    }
+
     virtual void InitSections() {
     }
 
@@ -35,7 +38,9 @@ namespace {
       assert(getCurrentSection() && "Cannot emit before setting section!");
       Symbol->setSection(*getCurrentSection());
     }
-
+    virtual void EmitDebugLabel(MCSymbol *Symbol) {
+      EmitLabel(Symbol);
+    }
     virtual void EmitAssemblerFlag(MCAssemblerFlag Flag) {}
     virtual void EmitThumbFunc(MCSymbol *Func) {}
 
@@ -92,6 +97,10 @@ namespace {
                                        unsigned Isa, unsigned Discriminator,
                                        StringRef FileName) {}
     virtual void EmitInstruction(const MCInst &Inst) {}
+
+    virtual void EmitBundleAlignMode(unsigned AlignPow2) {}
+    virtual void EmitBundleLock(bool AlignToEnd) {}
+    virtual void EmitBundleUnlock() {}
 
     virtual void FinishImpl() {}
 

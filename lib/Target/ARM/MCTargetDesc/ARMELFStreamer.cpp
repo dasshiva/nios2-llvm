@@ -13,14 +13,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/MC/MCELFStreamer.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/Twine.h"
+#include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCSectionELF.h"
-#include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCELF.h"
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCELFSymbolFlags.h"
@@ -28,9 +26,10 @@
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCObjectStreamer.h"
 #include "llvm/MC/MCSection.h"
+#include "llvm/MC/MCSectionELF.h"
+#include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/MC/MCAsmBackend.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ELF.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -150,8 +149,9 @@ private:
     MCSymbol *Start = getContext().CreateTempSymbol();
     EmitLabel(Start);
 
-    StringRef UniqueName = Name.str() + "." + itostr(MappingSymbolCounter++);
-    MCSymbol *Symbol = getContext().GetOrCreateSymbol(UniqueName);
+    MCSymbol *Symbol =
+      getContext().GetOrCreateSymbol(Name + "." +
+                                     Twine(MappingSymbolCounter++));
 
     MCSymbolData &SD = getAssembler().getOrCreateSymbolData(*Symbol);
     MCELF::SetType(SD, ELF::STT_NOTYPE);

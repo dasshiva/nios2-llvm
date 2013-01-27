@@ -25,8 +25,9 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/Constants.h"
 #include "llvm/DebugInfo.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -35,7 +36,6 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/Type.h"
 
 #define GET_REGINFO_TARGET_DESC
 #include "MipsGenRegisterInfo.inc"
@@ -46,6 +46,28 @@ MipsRegisterInfo::MipsRegisterInfo(const MipsSubtarget &ST)
   : MipsGenRegisterInfo(Mips::RA), Subtarget(ST) {}
 
 unsigned MipsRegisterInfo::getPICCallReg() { return Mips::T9; }
+
+
+unsigned
+MipsRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
+                                      MachineFunction &MF) const {
+  switch (RC->getID()) {
+  default:
+    return 0;
+  case Mips::CPURegsRegClassID:
+  case Mips::CPU64RegsRegClassID:
+  case Mips::DSPRegsRegClassID: {
+    const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+    return 28 - TFI->hasFP(MF);
+  }
+  case Mips::FGR32RegClassID:
+    return 32;
+  case Mips::AFGR64RegClassID:
+    return 16;
+  case Mips::FGR64RegClassID:
+    return 32;
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Callee Saved Registers methods

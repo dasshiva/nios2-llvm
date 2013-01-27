@@ -1,5 +1,3 @@
-.. _developer_policy:
-
 =====================
 LLVM Developer Policy
 =====================
@@ -26,8 +24,8 @@ This policy is also designed to accomplish the following objectives:
 
 #. Keep the top of Subversion trees as stable as possible.
 
-#. Establish awareness of the project's `copyright, license, and patent
-   policies`_ with contributors to the project.
+#. Establish awareness of the project's :ref:`copyright, license, and patent
+   policies <copyright-license-patents>` with contributors to the project.
 
 This policy is aimed at frequent contributors to LLVM. People interested in
 contributing one-off patches can do so in an informal way by sending them to the
@@ -401,7 +399,7 @@ Hacker!" in the commit message.
 
 Overall, please do not add contributor names to the source code.
 
-.. _copyright, license, and patent policies:
+.. _copyright-license-patents:
 
 Copyright, License, and Patents
 ===============================

@@ -78,8 +78,10 @@ else # !SunOS
 ifeq ($(HOST_OS),AuroraUX)
 ULIMIT=ulimit -t 600 ; ulimit -d 512000 ; ulimit -v 512000 ;
 else # !AuroraUX
-# Fedora 13 x86-64 python fails with -v 76800
-ULIMIT=ulimit -t 600 ; ulimit -d 512000 ; ulimit -m 512000 ; ulimit -v 1024000 ;
+# Newer versions of python try to allocate an insane amount of address space for
+# its thread-local storage, don't set a limit here.
+# FIXME: Those limits should be enforced by lit instead of globally.
+ULIMIT=ulimit -t 600 ; ulimit -d 512000 ; ulimit -m 512000 ;
 endif # AuroraUX
 endif # SunOS
 
@@ -129,7 +131,8 @@ endif
 
 lit.site.cfg: FORCE
 	@echo "Making LLVM 'lit.site.cfg' file..."
-	@$(ECHOPATH) s=@TARGET_TRIPLE@=$(TARGET_TRIPLE)=g > lit.tmp
+	@$(ECHOPATH) s=@LLVM_HOSTTRIPLE@=$(HOST_TRIPLE)=g > lit.tmp
+	@$(ECHOPATH) s=@TARGET_TRIPLE@=$(TARGET_TRIPLE)=g >> lit.tmp
 	@$(ECHOPATH) s=@LLVM_SOURCE_DIR@=$(LLVM_SRC_ROOT)=g >> lit.tmp
 	@$(ECHOPATH) s=@LLVM_BINARY_DIR@=$(LLVM_OBJ_ROOT)=g >> lit.tmp
 	@$(ECHOPATH) s=@LLVM_TOOLS_DIR@=$(ToolDir)=g >> lit.tmp

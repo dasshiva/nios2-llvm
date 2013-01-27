@@ -11,13 +11,13 @@
 // different components in LLVM.
 //
 //===----------------------------------------------------------------------===//
-#include "llvm/LLVMContext.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/Analysis/Verifier.h"
 #include "llvm/Assembly/PrintModulePass.h"
-#include "llvm/CallGraphSCCPass.h"
-#include "llvm/Constants.h"
-#include "llvm/Instruction.h"
-#include "llvm/Module.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Module.h"
 #include "llvm/PassManager.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -379,9 +379,7 @@ struct ConstModifier: public Modifier {
         RandomBits[i] = Ran->Rand64();
 
       APInt RandomInt(Ty->getPrimitiveSizeInBits(), makeArrayRef(RandomBits));
-
-      bool isIEEE = !Ty->isX86_FP80Ty() && !Ty->isPPC_FP128Ty();
-      APFloat RandomFloat(RandomInt, isIEEE);
+      APFloat RandomFloat(Ty->getFltSemantics(), RandomInt);
 
       if (Ran->Rand() & 1)
         return PT->push_back(ConstantFP::getNullValue(Ty));

@@ -15,7 +15,7 @@
 #define X86SUBTARGET_H
 
 #include "llvm/ADT/Triple.h"
-#include "llvm/CallingConv.h"
+#include "llvm/IR/CallingConv.h"
 #include "llvm/Target/TargetSubtargetInfo.h"
 #include <string>
 
@@ -146,6 +146,10 @@ protected:
   /// PostRAScheduler - True if using post-register-allocation scheduler.
   bool PostRAScheduler;
 
+  /// PadShortFunctions - True if the short functions should be padded to prevent
+  /// a stall when returning too early.
+  bool PadShortFunctions;
+
   /// stackAlignment - The minimum alignment known to hold of the stack frame on
   /// entry to the function and which must be maintained by every function.
   unsigned stackAlignment;
@@ -190,7 +194,20 @@ public:
   /// instruction.
   void AutoDetectSubtargetFeatures();
 
-  bool is64Bit() const { return In64BitMode; }
+  /// Is this x86_64? (disregarding specific ABI / programming model)
+  bool is64Bit() const {
+    return In64BitMode;
+  }
+
+  /// Is this x86_64 with the ILP32 programming model (x32 ABI)?
+  bool isTarget64BitILP32() const {
+    return In64BitMode && (TargetTriple.getEnvironment() == Triple::GNUX32);
+  }
+
+  /// Is this x86_64 with the LP64 programming model (standard AMD64, no x32)?
+  bool isTarget64BitLP64() const {
+    return In64BitMode && (TargetTriple.getEnvironment() != Triple::GNUX32);
+  }
 
   PICStyles::Style getPICStyle() const { return PICStyle; }
   void setPICStyle(PICStyles::Style Style)  { PICStyle = Style; }
@@ -231,6 +248,7 @@ public:
   bool hasCmpxchg16b() const { return HasCmpxchg16b; }
   bool useLeaForSP() const { return UseLeaForSP; }
   bool hasSlowDivide() const { return HasSlowDivide; }
+  bool padShortFunctions() const { return PadShortFunctions; }
 
   bool isAtom() const { return X86ProcFamily == IntelAtom; }
 

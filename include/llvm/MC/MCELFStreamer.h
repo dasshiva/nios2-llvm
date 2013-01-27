@@ -14,10 +14,8 @@
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCObjectStreamer.h"
 #include "llvm/MC/SectionKind.h"
-
+#include "llvm/Support/DataTypes.h"
 #include <vector>
-
-#include <stdint.h>
 
 namespace llvm {
 class MCAsmBackend;
@@ -46,8 +44,10 @@ public:
   /// @{
 
   virtual void InitSections();
+  virtual void InitToTextSection();
   virtual void ChangeSection(const MCSection *Section);
   virtual void EmitLabel(MCSymbol *Symbol);
+  virtual void EmitDebugLabel(MCSymbol *Symbol);
   virtual void EmitAssemblerFlag(MCAssemblerFlag Flag);
   virtual void EmitThumbFunc(MCSymbol *Func);
   virtual void EmitWeakReference(MCSymbol *Alias, const MCSymbol *Symbol);
@@ -76,12 +76,18 @@ public:
 
   virtual void EmitTCEntry(const MCSymbol &S);
 
+  virtual void EmitValueToAlignment(unsigned, int64_t, unsigned, unsigned);
+
   virtual void FinishImpl();
   /// @}
 
 private:
   virtual void EmitInstToFragment(const MCInst &Inst);
   virtual void EmitInstToData(const MCInst &Inst);
+
+  virtual void EmitBundleAlignMode(unsigned AlignPow2);
+  virtual void EmitBundleLock(bool AlignToEnd);
+  virtual void EmitBundleUnlock();
 
   void fixSymbolsInTLSFixups(const MCExpr *expr);
 

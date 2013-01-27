@@ -9,9 +9,9 @@
 //
 // This file defines routines for folding instructions into constants.
 //
-// Also, to supplement the basic VMCore ConstantExpr simplifications,
+// Also, to supplement the basic IR ConstantExpr simplifications,
 // this file defines some additional folding routines that can make use of
-// DataLayout information. These functions cannot go in VMCore due to library
+// DataLayout information. These functions cannot go in IR due to library
 // dependency issues.
 //
 //===----------------------------------------------------------------------===//
@@ -20,14 +20,14 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/Constants.h"
-#include "llvm/DataLayout.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Function.h"
-#include "llvm/GlobalVariable.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Operator.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FEnv.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
@@ -68,7 +68,7 @@ static Constant *FoldBitCast(Constant *C, Type *DestTy,
       unsigned FPWidth = SrcEltTy->getPrimitiveSizeInBits();
       Type *SrcIVTy =
         VectorType::get(IntegerType::get(C->getContext(), FPWidth), NumSrcElts);
-      // Ask VMCore to do the conversion now that #elts line up.
+      // Ask IR to do the conversion now that #elts line up.
       C = ConstantExpr::getBitCast(C, SrcIVTy);
       CDV = cast<ConstantDataVector>(C);
     }
@@ -104,7 +104,7 @@ static Constant *FoldBitCast(Constant *C, Type *DestTy,
   if (!isa<ConstantDataVector>(C) && !isa<ConstantVector>(C))
     return ConstantExpr::getBitCast(C, DestTy);
 
-  // If the element types match, VMCore can fold it.
+  // If the element types match, IR can fold it.
   unsigned NumDstElt = DestVTy->getNumElements();
   unsigned NumSrcElt = C->getType()->getVectorNumElements();
   if (NumDstElt == NumSrcElt)
@@ -131,7 +131,7 @@ static Constant *FoldBitCast(Constant *C, Type *DestTy,
     // Recursively handle this integer conversion, if possible.
     C = FoldBitCast(C, DestIVTy, TD);
 
-    // Finally, VMCore can handle this now that #elts line up.
+    // Finally, IR can handle this now that #elts line up.
     return ConstantExpr::getBitCast(C, DestTy);
   }
 
@@ -141,9 +141,9 @@ static Constant *FoldBitCast(Constant *C, Type *DestTy,
     unsigned FPWidth = SrcEltTy->getPrimitiveSizeInBits();
     Type *SrcIVTy =
       VectorType::get(IntegerType::get(C->getContext(), FPWidth), NumSrcElt);
-    // Ask VMCore to do the conversion now that #elts line up.
+    // Ask IR to do the conversion now that #elts line up.
     C = ConstantExpr::getBitCast(C, SrcIVTy);
-    // If VMCore wasn't able to fold it, bail out.
+    // If IR wasn't able to fold it, bail out.
     if (!isa<ConstantVector>(C) &&  // FIXME: Remove ConstantVector.
         !isa<ConstantDataVector>(C))
       return C;
@@ -218,10 +218,10 @@ static Constant *FoldBitCast(Constant *C, Type *DestTy,
 /// from a global, return the global and the constant.  Because of
 /// constantexprs, this function is recursive.
 static bool IsConstantOffsetFromGlobal(Constant *C, GlobalValue *&GV,
-                                       int64_t &Offset, const DataLayout &TD) {
+                                       APInt &Offset, const DataLayout &TD) {
   // Trivial case, constant is the global.
   if ((GV = dyn_cast<GlobalValue>(C))) {
-    Offset = 0;
+    Offset.clearAllBits();
     return true;
   }
 
@@ -256,10 +256,14 @@ static bool IsConstantOffsetFromGlobal(Constant *C, GlobalValue *&GV,
 
       if (StructType *ST = dyn_cast<StructType>(*GTI)) {
         // N = N + Offset
-        Offset += TD.getStructLayout(ST)->getElementOffset(CI->getZExtValue());
+        Offset +=
+            APInt(Offset.getBitWidth(),
+                  TD.getStructLayout(ST)->getElementOffset(CI->getZExtValue()));
       } else {
         SequentialType *SQT = cast<SequentialType>(*GTI);
-        Offset += TD.getTypeAllocSize(SQT->getElementType())*CI->getSExtValue();
+        Offset += APInt(Offset.getBitWidth(),
+                        TD.getTypeAllocSize(SQT->getElementType()) *
+                        CI->getSExtValue());
       }
     }
     return true;
@@ -423,7 +427,7 @@ static Constant *FoldReinterpretLoadFromConstPtr(Constant *C,
   if (BytesLoaded > 32 || BytesLoaded == 0) return 0;
 
   GlobalValue *GVal;
-  int64_t Offset;
+  APInt Offset(TD.getPointerSizeInBits(), 0);
   if (!IsConstantOffsetFromGlobal(C, GVal, Offset, TD))
     return 0;
 
@@ -434,14 +438,15 @@ static Constant *FoldReinterpretLoadFromConstPtr(Constant *C,
 
   // If we're loading off the beginning of the global, some bytes may be valid,
   // but we don't try to handle this.
-  if (Offset < 0) return 0;
+  if (Offset.isNegative()) return 0;
 
   // If we're not accessing anything in this constant, the result is undefined.
-  if (uint64_t(Offset) >= TD.getTypeAllocSize(GV->getInitializer()->getType()))
+  if (Offset.getZExtValue() >=
+      TD.getTypeAllocSize(GV->getInitializer()->getType()))
     return UndefValue::get(IntType);
 
   unsigned char RawBytes[32] = {0};
-  if (!ReadDataFromGlobal(GV->getInitializer(), Offset, RawBytes,
+  if (!ReadDataFromGlobal(GV->getInitializer(), Offset.getZExtValue(), RawBytes,
                           BytesLoaded, TD))
     return 0;
 
@@ -565,7 +570,8 @@ static Constant *SymbolicallyEvaluateBinop(unsigned Opc, Constant *Op0,
   // constant.  This happens frequently when iterating over a global array.
   if (Opc == Instruction::Sub && TD) {
     GlobalValue *GV1, *GV2;
-    int64_t Offs1, Offs2;
+    APInt Offs1(TD->getPointerSizeInBits(), 0),
+          Offs2(TD->getPointerSizeInBits(), 0);
 
     if (IsConstantOffsetFromGlobal(Op0, GV1, Offs1, *TD))
       if (IsConstantOffsetFromGlobal(Op1, GV2, Offs2, *TD) &&
@@ -1337,7 +1343,7 @@ llvm::ConstantFoldCall(Function *F, ArrayRef<Constant *> Operands,
       case Intrinsic::ctpop:
         return ConstantInt::get(Ty, Op->getValue().countPopulation());
       case Intrinsic::convert_from_fp16: {
-        APFloat Val(Op->getValue());
+        APFloat Val(APFloat::IEEEhalf, Op->getValue());
 
         bool lost = false;
         APFloat::opStatus status =
@@ -1468,12 +1474,12 @@ llvm::ConstantFoldCall(Function *F, ArrayRef<Constant *> Operands,
           return ConstantStruct::get(cast<StructType>(F->getReturnType()), Ops);
         }
         case Intrinsic::cttz:
-          // FIXME: This should check for Op2 == 1, and become unreachable if
-          // Op1 == 0.
+          if (Op2->isOne() && Op1->isZero()) // cttz(0, 1) is undef.
+            return UndefValue::get(Ty);
           return ConstantInt::get(Ty, Op1->getValue().countTrailingZeros());
         case Intrinsic::ctlz:
-          // FIXME: This should check for Op2 == 1, and become unreachable if
-          // Op1 == 0.
+          if (Op2->isOne() && Op1->isZero()) // ctlz(0, 1) is undef.
+            return UndefValue::get(Ty);
           return ConstantInt::get(Ty, Op1->getValue().countLeadingZeros());
         }
       }

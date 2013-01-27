@@ -23,7 +23,6 @@
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/Target/TargetTransformImpl.h"
 
 namespace llvm {
   namespace X86ISD {
@@ -182,6 +181,9 @@ namespace llvm {
       /// BLENDI - Blend where the selector is an immediate.
       BLENDI,
 
+      // SUBUS - Integer sub with unsigned saturation.
+      SUBUS,
+
       /// HADD - Integer horizontal add.
       HADD,
 
@@ -193,6 +195,12 @@ namespace llvm {
 
       /// FHSUB - Floating point horizontal sub.
       FHSUB,
+
+      /// UMAX, UMIN - Unsigned integer max and min.
+      UMAX, UMIN,
+
+      /// SMAX, SMIN - Signed integer max and min.
+      SMAX, SMIN,
 
       /// FMAX, FMIN - Floating point max and min.
       ///
@@ -269,8 +277,6 @@ namespace llvm {
       // ADD, SUB, SMUL, etc. - Arithmetic operations with FLAGS results.
       ADD, SUB, ADC, SBB, SMUL,
       INC, DEC, OR, XOR, AND,
-
-      ANDN, // ANDN - Bitwise AND NOT with FLAGS results.
 
       BLSI,   // BLSI - Extract lowest set isolated bit
       BLSMSK, // BLSMSK - Get mask up to lowest set bit
@@ -494,23 +500,29 @@ namespace llvm {
     /// lowering. If DstAlign is zero that means it's safe to destination
     /// alignment can satisfy any constraint. Similarly if SrcAlign is zero it
     /// means there isn't a need to check it against alignment requirement,
-    /// probably because the source does not need to be loaded. If
-    /// 'IsZeroVal' is true, that means it's safe to return a
-    /// non-scalar-integer type, e.g. empty string source, constant, or loaded
-    /// from memory. 'MemcpyStrSrc' indicates whether the memcpy source is
-    /// constant so it does not need to be loaded.
+    /// probably because the source does not need to be loaded. If 'IsMemset' is
+    /// true, that means it's expanding a memset. If 'ZeroMemset' is true, that
+    /// means it's a memset of zero. 'MemcpyStrSrc' indicates whether the memcpy
+    /// source is constant so it does not need to be loaded.
     /// It returns EVT::Other if the type should be determined using generic
     /// target-independent logic.
     virtual EVT
-    getOptimalMemOpType(uint64_t Size, unsigned DstAlign, unsigned SrcAlign,
-                        bool IsZeroVal, bool MemcpyStrSrc,
+    getOptimalMemOpType(uint64_t Size, unsigned DstAlign, unsigned SrcAlign, 
+                        bool IsMemset, bool ZeroMemset, bool MemcpyStrSrc,
                         MachineFunction &MF) const;
 
+    /// isSafeMemOpType - Returns true if it's safe to use load / store of the
+    /// specified type to expand memcpy / memset inline. This is mostly true
+    /// for all types except for some special cases. For example, on X86
+    /// targets without SSE2 f64 load / store are done with fldl / fstpl which
+    /// also does type conversion. Note the specified type doesn't have to be
+    /// legal as the hook is used before type legalization.
+    virtual bool isSafeMemOpType(MVT VT) const;
+
     /// allowsUnalignedMemoryAccesses - Returns true if the target allows
-    /// unaligned memory accesses. of the specified type.
-    virtual bool allowsUnalignedMemoryAccesses(EVT VT) const {
-      return true;
-    }
+    /// unaligned memory accesses. of the specified type. Returns whether it
+    /// is "fast" by reference in the second argument.
+    virtual bool allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) const;
 
     /// LowerOperation - Provide custom lowering hooks for some operations.
     ///
@@ -709,7 +721,7 @@ namespace llvm {
 
   protected:
     std::pair<const TargetRegisterClass*, uint8_t>
-    findRepresentativeClass(EVT VT) const;
+    findRepresentativeClass(MVT VT) const;
 
   private:
     /// Subtarget - Keep a pointer to the X86Subtarget around so that we can
@@ -782,9 +794,7 @@ namespace llvm {
     SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerEXTRACT_VECTOR_ELT_SSE4(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerINSERT_VECTOR_ELT_SSE4(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerGlobalAddress(const GlobalValue *GV, DebugLoc dl,
@@ -799,18 +809,18 @@ namespace llvm {
     SDValue LowerUINT_TO_FP_i64(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerUINT_TO_FP_i32(SDValue Op, SelectionDAG &DAG) const;
     SDValue lowerUINT_TO_FP_vec(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerZERO_EXTEND(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerZERO_EXTEND(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerSIGN_EXTEND(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerANY_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFP_TO_SINT(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFP_TO_UINT(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerFP_EXTEND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFABS(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFNEG(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFCOPYSIGN(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerToBT(SDValue And, ISD::CondCode CC,
                       DebugLoc dl, SelectionDAG &DAG) const;
     SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerVSETCC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerMEMSET(SDValue Op, SelectionDAG &DAG) const;
@@ -827,6 +837,7 @@ namespace llvm {
     SDValue LowerINIT_TRAMPOLINE(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFLT_ROUNDS_(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerShift(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerSDIV(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerSIGN_EXTEND_INREG(SDValue Op, SelectionDAG &DAG) const;
 
@@ -837,7 +848,7 @@ namespace llvm {
 
     SDValue LowerVectorAllZeroTest(SDValue Op, SelectionDAG &DAG) const;
 
-    SDValue lowerVectorIntExtend(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerVectorIntExtend(SDValue Op, SelectionDAG &DAG) const;
 
     virtual SDValue
       LowerFormalArguments(SDValue Chain,
@@ -860,9 +871,8 @@ namespace llvm {
 
     virtual bool mayBeEmittedAsTailCall(CallInst *CI) const;
 
-    virtual EVT
-    getTypeForExtArgOrReturn(LLVMContext &Context, EVT VT,
-                             ISD::NodeType ExtendKind) const;
+    virtual MVT
+    getTypeForExtArgOrReturn(MVT VT, ISD::NodeType ExtendKind) const;
 
     virtual bool
     CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
@@ -931,31 +941,6 @@ namespace llvm {
     FastISel *createFastISel(FunctionLoweringInfo &funcInfo,
                              const TargetLibraryInfo *libInfo);
   }
-
-  class X86ScalarTargetTransformImpl : public ScalarTargetTransformImpl {
-  public:
-    explicit X86ScalarTargetTransformImpl(const TargetLowering *TL) :
-      ScalarTargetTransformImpl(TL) {};
-
-    virtual PopcntHwSupport getPopcntHwSupport(unsigned TyWidth) const;
-  };
-
-  class X86VectorTargetTransformInfo : public VectorTargetTransformImpl {
-  public:
-    explicit X86VectorTargetTransformInfo(const TargetLowering *TL) :
-    VectorTargetTransformImpl(TL) {}
-
-    virtual unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty) const;
-
-    virtual unsigned getVectorInstrCost(unsigned Opcode, Type *Val,
-                                        unsigned Index) const;
-
-    unsigned getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
-                                Type *CondTy) const;
-
-    virtual unsigned getCastInstrCost(unsigned Opcode, Type *Dst,
-                                      Type *Src) const;
-  };
 }
 
 #endif    // X86ISELLOWERING_H

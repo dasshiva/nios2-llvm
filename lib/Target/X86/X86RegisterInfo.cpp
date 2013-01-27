@@ -28,8 +28,9 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/Constants.h"
-#include "llvm/Function.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Type.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -37,7 +38,6 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/Type.h"
 
 #define GET_REGINFO_TARGET_DESC
 #include "X86GenRegisterInfo.inc"
@@ -56,10 +56,12 @@ EnableBasePointer("x86-use-base-pointer", cl::Hidden, cl::init(true),
 
 X86RegisterInfo::X86RegisterInfo(X86TargetMachine &tm,
                                  const TargetInstrInfo &tii)
-  : X86GenRegisterInfo(tm.getSubtarget<X86Subtarget>().is64Bit()
-                         ? X86::RIP : X86::EIP,
+  : X86GenRegisterInfo((tm.getSubtarget<X86Subtarget>().is64Bit()
+                         ? X86::RIP : X86::EIP),
                        X86_MC::getDwarfRegFlavour(tm.getTargetTriple(), false),
-                       X86_MC::getDwarfRegFlavour(tm.getTargetTriple(), true)),
+                       X86_MC::getDwarfRegFlavour(tm.getTargetTriple(), true),
+                       (tm.getSubtarget<X86Subtarget>().is64Bit()
+                         ? X86::RIP : X86::EIP)),
                        TM(tm), TII(tii) {
   X86_MC::InitLLVM2SEHRegisterMapping(this);
 
@@ -175,20 +177,21 @@ X86RegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC) const{
 const TargetRegisterClass *
 X86RegisterInfo::getPointerRegClass(const MachineFunction &MF, unsigned Kind)
                                                                          const {
+  const X86Subtarget &Subtarget = TM.getSubtarget<X86Subtarget>();
   switch (Kind) {
   default: llvm_unreachable("Unexpected Kind in getPointerRegClass!");
   case 0: // Normal GPRs.
-    if (TM.getSubtarget<X86Subtarget>().is64Bit())
+    if (Subtarget.isTarget64BitLP64())
       return &X86::GR64RegClass;
     return &X86::GR32RegClass;
   case 1: // Normal GPRs except the stack pointer (for encoding reasons).
-    if (TM.getSubtarget<X86Subtarget>().is64Bit())
+    if (Subtarget.isTarget64BitLP64())
       return &X86::GR64_NOSPRegClass;
     return &X86::GR32_NOSPRegClass;
   case 2: // Available for tailcall (not callee-saved GPRs).
-    if (TM.getSubtarget<X86Subtarget>().isTargetWin64())
+    if (Subtarget.isTargetWin64())
       return &X86::GR64_TCW64RegClass;
-    if (TM.getSubtarget<X86Subtarget>().is64Bit())
+    else if (Subtarget.is64Bit())
       return &X86::GR64_TCRegClass;
 
     const Function *F = MF.getFunction();
@@ -417,7 +420,8 @@ bool X86RegisterInfo::needsStackRealignment(const MachineFunction &MF) const {
   unsigned StackAlign = TM.getFrameLowering()->getStackAlignment();
   bool requiresRealignment =
     ((MFI->getMaxAlignment() > StackAlign) ||
-     F->getFnAttributes().hasAttribute(Attributes::StackAlignment));
+     F->getAttributes().hasAttribute(AttributeSet::FunctionIndex,
+                                     Attribute::StackAlignment));
 
   // If we've requested that we force align the stack do so now.
   if (ForceStackAlign)

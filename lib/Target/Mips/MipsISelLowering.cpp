@@ -11,8 +11,8 @@
 // selection DAG.
 //
 //===----------------------------------------------------------------------===//
-
 #define DEBUG_TYPE "mips-lower"
+#include <set>
 #include "MipsISelLowering.h"
 #include "InstPrinter/MipsInstPrinter.h"
 #include "MCTargetDesc/MipsBaseInfo.h"
@@ -21,7 +21,6 @@
 #include "MipsTargetMachine.h"
 #include "MipsTargetObjectFile.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/CallingConv.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -29,10 +28,11 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/CodeGen/ValueTypes.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Function.h"
-#include "llvm/GlobalVariable.h"
-#include "llvm/Intrinsics.h"
+#include "llvm/IR/CallingConv.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -49,6 +49,13 @@ EnableMipsTailCalls("enable-mips-tail-calls", cl::Hidden,
 static cl::opt<bool>
 LargeGOT("mxgot", cl::Hidden,
          cl::desc("MIPS: Enable GOT larger than 64k."), cl::init(false));
+
+static cl::opt<bool>
+Mips16HardFloat("mips16-hard-float", cl::NotHidden,
+                cl::desc("MIPS: mips16 hard float enable."),
+                cl::init(false));
+
+
 
 static const uint16_t O32IntRegs[4] = {
   Mips::A0, Mips::A1, Mips::A2, Mips::A3
@@ -198,6 +205,66 @@ const char *MipsTargetLowering::getTargetNodeName(unsigned Opcode) const {
   }
 }
 
+namespace {
+  struct ltstr {
+    bool operator()(const char *s1, const char *s2) const
+    {
+      return strcmp(s1, s2) < 0;
+    }
+  };
+
+  std::set<const char*, ltstr> noHelperNeeded;
+
+  const char* addToNoHelperNeeded(const char* s) {
+    noHelperNeeded.insert(s);
+    return s;
+  }
+
+}
+
+void MipsTargetLowering::setMips16HardFloatLibCalls() {
+  setLibcallName(RTLIB::ADD_F32, addToNoHelperNeeded("__mips16_addsf3"));
+  setLibcallName(RTLIB::ADD_F64, addToNoHelperNeeded("__mips16_adddf3"));
+  setLibcallName(RTLIB::SUB_F32, addToNoHelperNeeded("__mips16_subsf3"));
+  setLibcallName(RTLIB::SUB_F64, addToNoHelperNeeded("__mips16_subdf3"));
+  setLibcallName(RTLIB::MUL_F32, addToNoHelperNeeded("__mips16_mulsf3"));
+  setLibcallName(RTLIB::MUL_F64, addToNoHelperNeeded("__mips16_muldf3"));
+  setLibcallName(RTLIB::DIV_F32, addToNoHelperNeeded("__mips16_divsf3"));
+  setLibcallName(RTLIB::DIV_F64, addToNoHelperNeeded("__mips16_divdf3"));
+  setLibcallName(RTLIB::FPEXT_F32_F64,
+                 addToNoHelperNeeded("__mips16_extendsfdf2"));
+  setLibcallName(RTLIB::FPROUND_F64_F32,
+                 addToNoHelperNeeded("__mips16_truncdfsf2"));
+  setLibcallName(RTLIB::FPTOSINT_F32_I32,
+                 addToNoHelperNeeded("__mips16_fix_truncsfsi"));
+  setLibcallName(RTLIB::FPTOSINT_F64_I32,
+                 addToNoHelperNeeded("__mips16_fix_truncdfsi"));
+  setLibcallName(RTLIB::SINTTOFP_I32_F32,
+                 addToNoHelperNeeded("__mips16_floatsisf"));
+  setLibcallName(RTLIB::SINTTOFP_I32_F64,
+                 addToNoHelperNeeded("__mips16_floatsidf"));
+  setLibcallName(RTLIB::UINTTOFP_I32_F32,
+                 addToNoHelperNeeded("__mips16_floatunsisf"));
+  setLibcallName(RTLIB::UINTTOFP_I32_F64,
+                 addToNoHelperNeeded("__mips16_floatunsidf"));
+  setLibcallName(RTLIB::OEQ_F32, addToNoHelperNeeded("__mips16_eqsf2"));
+  setLibcallName(RTLIB::OEQ_F64, addToNoHelperNeeded("__mips16_eqdf2"));
+  setLibcallName(RTLIB::UNE_F32, addToNoHelperNeeded("__mips16_nesf2"));
+  setLibcallName(RTLIB::UNE_F64, addToNoHelperNeeded("__mips16_nedf2"));
+  setLibcallName(RTLIB::OGE_F32, addToNoHelperNeeded("__mips16_gesf2"));
+  setLibcallName(RTLIB::OGE_F64, addToNoHelperNeeded("__mips16_gedf2"));
+  setLibcallName(RTLIB::OLT_F32, addToNoHelperNeeded("__mips16_ltsf2"));
+  setLibcallName(RTLIB::OLT_F64, addToNoHelperNeeded("__mips16_ltdf2"));
+  setLibcallName(RTLIB::OLE_F32, addToNoHelperNeeded("__mips16_lesf2"));
+  setLibcallName(RTLIB::OLE_F64, addToNoHelperNeeded("__mips16_ledf2"));
+  setLibcallName(RTLIB::OGT_F32, addToNoHelperNeeded("__mips16_gtsf2"));
+  setLibcallName(RTLIB::OGT_F64, addToNoHelperNeeded("__mips16_gtdf2"));
+  setLibcallName(RTLIB::UO_F32, addToNoHelperNeeded("__mips16_unordsf2"));
+  setLibcallName(RTLIB::UO_F64, addToNoHelperNeeded("__mips16_unorddf2"));
+  setLibcallName(RTLIB::O_F32, addToNoHelperNeeded("__mips16_unordsf2"));
+  setLibcallName(RTLIB::O_F64, addToNoHelperNeeded("__mips16_unorddf2"));
+}
+
 MipsTargetLowering::
 MipsTargetLowering(MipsTargetMachine &TM)
   : TargetLowering(TM, new MipsTargetObjectFile()),
@@ -218,6 +285,8 @@ MipsTargetLowering(MipsTargetMachine &TM)
 
   if (Subtarget->inMips16Mode()) {
     addRegisterClass(MVT::i32, &Mips::CPU16RegsRegClass);
+    if (Mips16HardFloat)
+      setMips16HardFloatLibCalls();
   }
 
   if (Subtarget->hasDSP()) {
@@ -457,7 +526,8 @@ MipsTargetLowering(MipsTargetMachine &TM)
   maxStoresPerMemcpy = 16;
 }
 
-bool MipsTargetLowering::allowsUnalignedMemoryAccesses(EVT VT) const {
+bool
+MipsTargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) const {
   MVT::SimpleValueType SVT = VT.getSimpleVT().SimpleTy;
 
   if (Subtarget->inMips16Mode())
@@ -466,6 +536,8 @@ bool MipsTargetLowering::allowsUnalignedMemoryAccesses(EVT VT) const {
   switch (SVT) {
   case MVT::i64:
   case MVT::i32:
+    if (Fast)
+      *Fast = true;
     return true;
   default:
     return false;
@@ -473,7 +545,9 @@ bool MipsTargetLowering::allowsUnalignedMemoryAccesses(EVT VT) const {
 }
 
 EVT MipsTargetLowering::getSetCCResultType(EVT VT) const {
-  return MVT::i32;
+  if (!VT.isVector())
+    return MVT::i32;
+  return VT.changeVectorElementTypeToInteger();
 }
 
 // SelectMadd -
@@ -1001,7 +1075,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
 static unsigned
 AddLiveIn(MachineFunction &MF, unsigned PReg, const TargetRegisterClass *RC)
 {
-  assert(RC->contains(PReg) && "Not the correct regclass!");
   unsigned VReg = MF.getRegInfo().createVirtualRegister(RC);
   MF.getRegInfo().addLiveIn(PReg, VReg);
   return VReg;
@@ -2152,7 +2225,7 @@ SDValue MipsTargetLowering::LowerRETURNADDR(SDValue Op,
 
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
-  EVT VT = Op.getValueType();
+  MVT VT = Op.getSimpleValueType();
   unsigned RA = IsN64 ? Mips::RA_64 : Mips::RA;
   MFI->setReturnAddressIsTaken(true);
 
@@ -2706,6 +2779,163 @@ MipsTargetLowering::passArgOnStack(SDValue StackPtr, unsigned Offset,
                       /*isVolatile=*/ true, false, 0);
 }
 
+//
+// The Mips16 hard float is a crazy quilt inherited from gcc. I have a much
+// cleaner way to do all of this but it will have to wait until the traditional
+// gcc mechanism is completed.
+//
+// For Pic, in order for Mips16 code to call Mips32 code which according the abi
+// have either arguments or returned values placed in floating point registers,
+// we use a set of helper functions. (This includes functions which return type
+//  complex which on Mips are returned in a pair of floating point registers).
+//
+// This is an encoding that we inherited from gcc.
+// In Mips traditional O32, N32 ABI, floating point numbers are passed in
+// floating point argument registers 1,2 only when the first and optionally
+// the second arguments are float (sf) or double (df).
+// For Mips16 we are only concerned with the situations where floating point
+// arguments are being passed in floating point registers by the ABI, because
+// Mips16 mode code cannot execute floating point instructions to load those
+// values and hence helper functions are needed.
+// The possibilities are (), (sf), (sf, sf), (sf, df), (df), (df, sf), (df, df)
+// the helper function suffixs for these are:
+//                        0,  1,    5,        9,         2,   6,        10
+// this suffix can then be calculated as follows:
+// for a given argument Arg:
+//     Arg1x, Arg2x = 1 :  Arg is sf
+//                    2 :  Arg is df
+//                    0:   Arg is neither sf or df
+// So this stub is the string for number Arg1x + Arg2x*4.
+// However not all numbers between 0 and 10 are possible, we check anyway and
+// assert if the impossible exists.
+//
+
+unsigned int MipsTargetLowering::getMips16HelperFunctionStubNumber
+  (ArgListTy &Args) const {
+  unsigned int resultNum = 0;
+  if (Args.size() >= 1) {
+    Type *t = Args[0].Ty;
+    if (t->isFloatTy()) {
+      resultNum = 1;
+    }
+    else if (t->isDoubleTy()) {
+      resultNum = 2;
+    }
+  }
+  if (resultNum) {
+    if (Args.size() >=2) {
+      Type *t = Args[1].Ty;
+      if (t->isFloatTy()) {
+        resultNum += 4;
+      }
+      else if (t->isDoubleTy()) {
+        resultNum += 8;
+      }
+    }
+  }
+  return resultNum;
+}
+
+//
+// prefixs are attached to stub numbers depending on the return type .
+// return type: float  sf_
+//              double df_
+//              single complex sc_
+//              double complext dc_
+//              others  NO PREFIX
+//
+//
+// The full name of a helper function is__mips16_call_stub +
+//    return type dependent prefix + stub number
+//
+//
+// This is something that probably should be in a different source file and
+// perhaps done differently but my main purpose is to not waste runtime
+// on something that we can enumerate in the source. Another possibility is
+// to have a python script to generate these mapping tables. This will do
+// for now. There are a whole series of helper function mapping arrays, one
+// for each return type class as outlined above. There there are 11 possible
+//  entries. Ones with 0 are ones which should never be selected
+//
+// All the arrays are similar except for ones which return neither
+// sf, df, sc, dc, in which only care about ones which have sf or df as a
+// first parameter.
+//
+#define P_ "__mips16_call_stub_"
+#define MAX_STUB_NUMBER 10
+#define T1 P "1", P "2", 0, 0, P "5", P "6", 0, 0, P "9", P "10"
+#define T P "0" , T1
+#define P P_
+static char const * vMips16Helper[MAX_STUB_NUMBER+1] =
+  {0, T1 };
+#undef P
+#define P P_ "sf_"
+static char const * sfMips16Helper[MAX_STUB_NUMBER+1] =
+  { T };
+#undef P
+#define P P_ "df_"
+static char const * dfMips16Helper[MAX_STUB_NUMBER+1] =
+  { T };
+#undef P
+#define P P_ "sc_"
+static char const * scMips16Helper[MAX_STUB_NUMBER+1] =
+  { T };
+#undef P
+#define P P_ "dc_"
+static char const * dcMips16Helper[MAX_STUB_NUMBER+1] =
+  { T };
+#undef P
+#undef P_
+
+
+const char* MipsTargetLowering::
+  getMips16HelperFunction
+    (Type* RetTy, ArgListTy &Args, bool &needHelper) const {
+  const unsigned int stubNum = getMips16HelperFunctionStubNumber(Args);
+#ifndef NDEBUG
+  const unsigned int maxStubNum = 10;
+  assert(stubNum <= maxStubNum);
+  const bool validStubNum[maxStubNum+1] =
+    {true, true, true, false, false, true, true, false, false, true, true};
+  assert(validStubNum[stubNum]);
+#endif
+  const char *result;
+  if (RetTy->isFloatTy()) {
+    result = sfMips16Helper[stubNum];
+  }
+  else if (RetTy ->isDoubleTy()) {
+    result = dfMips16Helper[stubNum];
+  }
+  else if (RetTy->isStructTy()) {
+    // check if it's complex
+    if (RetTy->getNumContainedTypes() == 2) {
+      if ((RetTy->getContainedType(0)->isFloatTy()) &&
+          (RetTy->getContainedType(1)->isFloatTy())) {
+        result = scMips16Helper[stubNum];
+      }
+      else if ((RetTy->getContainedType(0)->isDoubleTy()) &&
+               (RetTy->getContainedType(1)->isDoubleTy())) {
+        result = dcMips16Helper[stubNum];
+      }
+      else {
+        llvm_unreachable("Uncovered condition");
+      }
+    }
+    else {
+      llvm_unreachable("Uncovered condition");
+    }
+  }
+  else {
+    if (stubNum == 0) {
+      needHelper = false;
+      return "";
+    }
+    result = vMips16Helper[stubNum];
+  }
+  needHelper = true;
+  return result;
+}
+
 /// LowerCall - functions arguments are copied from virtual regs to
 /// (physical regs)/(stack frame), CALLSEQ_START and CALLSEQ_END are emitted.
 SDValue
@@ -2722,6 +2952,26 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   CallingConv::ID CallConv              = CLI.CallConv;
   bool isVarArg                         = CLI.IsVarArg;
 
+  const char* mips16HelperFunction = 0;
+  bool needMips16Helper = false;
+
+  if (Subtarget->inMips16Mode() && getTargetMachine().Options.UseSoftFloat &&
+      Mips16HardFloat) {
+    //
+    // currently we don't have symbols tagged with the mips16 or mips32
+    // qualifier so we will assume that we don't know what kind it is.
+    // and generate the helper
+    //
+    bool lookupHelper = true;
+    if (ExternalSymbolSDNode *S = dyn_cast<ExternalSymbolSDNode>(Callee)) {
+      if (noHelperNeeded.find(S->getSymbol()) != noHelperNeeded.end()) {
+        lookupHelper = false;
+      }
+    }
+    if (lookupHelper) mips16HelperFunction =
+      getMips16HelperFunction(CLI.RetTy, CLI.Args, needMips16Helper);
+
+  }
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
   const TargetFrameLowering *TFL = MF.getTarget().getFrameLowering();
@@ -2762,7 +3012,7 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                         getPointerTy());
 
   // With EABI is it possible to have 16 args on registers.
-  SmallVector<std::pair<unsigned, SDValue>, 16> RegsToPass;
+  std::deque< std::pair<unsigned, SDValue> > RegsToPass;
   SmallVector<SDValue, 8> MemOpChains;
   MipsCC::byval_iterator ByValArg = MipsCCInfo.byval_begin();
 
@@ -2846,12 +3096,14 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
   // node so that legalize doesn't hack it.
   bool IsPICCall = (IsN64 || IsPIC); // true if calls are translated to jalr $25
-  bool GlobalOrExternal = false;
+  bool GlobalOrExternal = false, InternalLinkage = false;
   SDValue CalleeLo;
 
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     if (IsPICCall) {
-      if (G->getGlobal()->hasInternalLinkage())
+      InternalLinkage = G->getGlobal()->hasInternalLinkage();
+
+      if (InternalLinkage)
         Callee = getAddrLocal(Callee, DAG, HasMips64);
       else if (LargeGOT)
         Callee = getAddrGlobalLargeGOT(Callee, DAG, MipsII::MO_CALL_HI16,
@@ -2878,28 +3130,33 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     GlobalOrExternal = true;
   }
 
-  SDValue InFlag;
-
-  // T9 register operand.
-  SDValue T9;
+  SDValue JumpTarget = Callee;
 
   // T9 should contain the address of the callee function if
   // -reloction-model=pic or it is an indirect call.
   if (IsPICCall || !GlobalOrExternal) {
-    // copy to T9
     unsigned T9Reg = IsN64 ? Mips::T9_64 : Mips::T9;
-    Chain = DAG.getCopyToReg(Chain, dl, T9Reg, Callee, SDValue(0, 0));
-    InFlag = Chain.getValue(1);
+    unsigned V0Reg = Mips::V0;
+    if (needMips16Helper) {
+      RegsToPass.push_front(std::make_pair(V0Reg, Callee));
+      JumpTarget = DAG.getExternalSymbol(
+        mips16HelperFunction, getPointerTy());
+      JumpTarget = getAddrGlobal(JumpTarget, DAG, MipsII::MO_GOT);
+    }
+    else {
+      RegsToPass.push_front(std::make_pair(T9Reg, Callee));
 
-    if (Subtarget->inMips16Mode())
-      T9 = DAG.getRegister(T9Reg, getPointerTy());
-    else
-      Callee = DAG.getRegister(T9Reg, getPointerTy());
+      if (!Subtarget->inMips16Mode())
+        JumpTarget = SDValue();
+    }
   }
 
   // Insert node "GP copy globalreg" before call to function.
-  // Lazy-binding stubs require GP to point to the GOT.
-  if (IsPICCall) {
+  //
+  // R_MIPS_CALL* operators (emitted when non-internal functions are called
+  // in PIC mode) allow symbols to be resolved via lazy binding.
+  // The lazy binding stub requires GP to point to the GOT.
+  if (IsPICCall && !InternalLinkage) {
     unsigned GPReg = IsN64 ? Mips::GP_64 : Mips::GP;
     EVT Ty = IsN64 ? MVT::i64 : MVT::i32;
     RegsToPass.push_back(std::make_pair(GPReg, GetGlobalReg(DAG, Ty)));
@@ -2909,6 +3166,8 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // chain and flag operands which copy the outgoing args into registers.
   // The InFlag in necessary since all emitted instructions must be
   // stuck together.
+  SDValue InFlag;
+
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i) {
     Chain = DAG.getCopyToReg(Chain, dl, RegsToPass[i].first,
                              RegsToPass[i].second, InFlag);
@@ -2920,19 +3179,16 @@ MipsTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   //
   // Returns a chain & a flag for retval copy to use.
   SDVTList NodeTys = DAG.getVTList(MVT::Other, MVT::Glue);
-  SmallVector<SDValue, 8> Ops;
-  Ops.push_back(Chain);
-  Ops.push_back(Callee);
+  SmallVector<SDValue, 8> Ops(1, Chain);
+
+  if (JumpTarget.getNode())
+    Ops.push_back(JumpTarget);
 
   // Add argument registers to the end of the list so that they are
   // known live into the call.
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i)
     Ops.push_back(DAG.getRegister(RegsToPass[i].first,
                                   RegsToPass[i].second.getValueType()));
-
-  // Add T9 register operand.
-  if (T9.getNode())
-    Ops.push_back(T9);
 
   // Add a register mask operand representing the call-preserved registers.
   const TargetRegisterInfo *TRI = getTargetMachine().getRegisterInfo();
@@ -3048,7 +3304,8 @@ MipsTargetLowering::LowerFormalArguments(SDValue Chain,
       const TargetRegisterClass *RC;
 
       if (RegVT == MVT::i32)
-        RC = &Mips::CPURegsRegClass;
+        RC = Subtarget->inMips16Mode()? &Mips::CPU16RegsRegClass :
+                                        &Mips::CPURegsRegClass;
       else if (RegVT == MVT::i64)
         RC = &Mips::CPU64RegsRegClass;
       else if (RegVT == MVT::f32)
@@ -3473,7 +3730,8 @@ MipsTargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
 }
 
 EVT MipsTargetLowering::getOptimalMemOpType(uint64_t Size, unsigned DstAlign,
-                                            unsigned SrcAlign, bool IsZeroVal,
+                                            unsigned SrcAlign,
+                                            bool IsMemset, bool ZeroMemset,
                                             bool MemcpyStrSrc,
                                             MachineFunction &MF) const {
   if (Subtarget->hasMips64())
@@ -3652,7 +3910,7 @@ copyByValRegs(SDValue Chain, DebugLoc DL, std::vector<SDValue> &OutChains,
     return;
 
   // Copy arg registers.
-  EVT RegTy = MVT::getIntegerVT(CC.regSize() * 8);
+  MVT RegTy = MVT::getIntegerVT(CC.regSize() * 8);
   const TargetRegisterClass *RC = getRegClassFor(RegTy);
 
   for (unsigned I = 0; I < ByVal.NumRegs; ++I) {
@@ -3671,7 +3929,7 @@ copyByValRegs(SDValue Chain, DebugLoc DL, std::vector<SDValue> &OutChains,
 // Copy byVal arg to registers and stack.
 void MipsTargetLowering::
 passByValArg(SDValue Chain, DebugLoc DL,
-             SmallVector<std::pair<unsigned, SDValue>, 16> &RegsToPass,
+             std::deque< std::pair<unsigned, SDValue> > &RegsToPass,
              SmallVector<SDValue, 8> &MemOpChains, SDValue StackPtr,
              MachineFrameInfo *MFI, SelectionDAG &DAG, SDValue Arg,
              const MipsCC &CC, const ByValArgInfo &ByVal,
@@ -3774,7 +4032,7 @@ MipsTargetLowering::writeVarArgRegs(std::vector<SDValue> &OutChains,
   const CCState &CCInfo = CC.getCCInfo();
   unsigned Idx = CCInfo.getFirstUnallocated(ArgRegs, NumRegs);
   unsigned RegSize = CC.regSize();
-  EVT RegTy = MVT::getIntegerVT(RegSize * 8);
+  MVT RegTy = MVT::getIntegerVT(RegSize * 8);
   const TargetRegisterClass *RC = getRegClassFor(RegTy);
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();

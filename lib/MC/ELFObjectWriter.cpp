@@ -203,7 +203,7 @@ class ELFObjectWriter : public MCObjectWriter {
     void String8(MCDataFragment &F, uint8_t Value) {
       char buf[1];
       buf[0] = Value;
-      F.getContents() += StringRef(buf, 1);
+      F.getContents().append(&buf[0], &buf[1]);
     }
 
     void String16(MCDataFragment &F, uint16_t Value) {
@@ -212,7 +212,7 @@ class ELFObjectWriter : public MCObjectWriter {
         StringLE16(buf, Value);
       else
         StringBE16(buf, Value);
-      F.getContents() += StringRef(buf, 2);
+      F.getContents().append(&buf[0], &buf[2]);
     }
 
     void String32(MCDataFragment &F, uint32_t Value) {
@@ -221,7 +221,7 @@ class ELFObjectWriter : public MCObjectWriter {
         StringLE32(buf, Value);
       else
         StringBE32(buf, Value);
-      F.getContents() += StringRef(buf, 4);
+      F.getContents().append(&buf[0], &buf[4]);
     }
 
     void String64(MCDataFragment &F, uint64_t Value) {
@@ -230,7 +230,7 @@ class ELFObjectWriter : public MCObjectWriter {
         StringLE64(buf, Value);
       else
         StringBE64(buf, Value);
-      F.getContents() += StringRef(buf, 8);
+      F.getContents().append(&buf[0], &buf[8]);
     }
 
     void WriteHeader(uint64_t SectionDataSize,
@@ -865,7 +865,7 @@ void ELFObjectWriter::ComputeSymbolTable(MCAssembler &Asm,
   // FIXME: Is this the correct place to do this?
   // FIXME: Why is an undefined reference to _GLOBAL_OFFSET_TABLE_ needed?
   if (NeedsGOT) {
-    llvm::StringRef Name = "_GLOBAL_OFFSET_TABLE_";
+    StringRef Name = "_GLOBAL_OFFSET_TABLE_";
     MCSymbol *Sym = Asm.getContext().GetOrCreateSymbol(Name);
     MCSymbolData &Data = Asm.getOrCreateSymbolData(*Sym);
     Data.setExternal(true);
@@ -1186,7 +1186,7 @@ void ELFObjectWriter::CreateMetadataSections(MCAssembler &Asm,
   // The first entry of a string table holds a null character so skip
   // section 0.
   uint64_t Index = 1;
-  F->getContents() += '\x00';
+  F->getContents().push_back('\x00');
 
   for (unsigned int I = 0, E = Sections.size(); I != E; ++I) {
     const MCSectionELF &Section = *Sections[I];
@@ -1204,8 +1204,8 @@ void ELFObjectWriter::CreateMetadataSections(MCAssembler &Asm,
     SectionStringTableIndex[&Section] = Index;
 
     Index += Name.size() + 1;
-    F->getContents() += Name;
-    F->getContents() += '\x00';
+    F->getContents().append(Name.begin(), Name.end());
+    F->getContents().push_back('\x00');
   }
 }
 
@@ -1319,6 +1319,8 @@ void ELFObjectWriter::WriteSection(MCAssembler &Asm,
   case ELF::SHT_FINI_ARRAY:
   case ELF::SHT_PREINIT_ARRAY:
   case ELF::SHT_X86_64_UNWIND:
+  case ELF::SHT_MIPS_REGINFO:
+  case ELF::SHT_MIPS_OPTIONS:
     // Nothing to do.
     break;
 
@@ -1380,7 +1382,7 @@ void ELFObjectWriter::WriteDataSectionData(MCAssembler &Asm,
          ++i) {
       const MCFragment &F = *i;
       assert(F.getKind() == MCFragment::FT_Data);
-      WriteBytes(cast<MCDataFragment>(F).getContents().str());
+      WriteBytes(cast<MCDataFragment>(F).getContents());
     }
   } else {
     Asm.writeSectionData(&SD, Layout);
