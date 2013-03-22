@@ -16,7 +16,7 @@
 #include "Nios2MachineFunction.h"
 #include "Nios2TargetMachine.h"
 #include "MCTargetDesc/Nios2BaseInfo.h"
-#include "llvm/Function.h"
+#include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"

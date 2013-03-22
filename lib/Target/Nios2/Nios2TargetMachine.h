@@ -19,7 +19,7 @@
 #include "Nios2ISelLowering.h"
 #include "Nios2SelectionDAGInfo.h"
 #include "Nios2Subtarget.h"
-#include "llvm/DataLayout.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetFrameLowering.h"
 

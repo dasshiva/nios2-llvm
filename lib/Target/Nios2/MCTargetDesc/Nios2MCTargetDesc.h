@@ -18,7 +18,15 @@
 #include "llvm/Support/TargetRegistry.h"
 
 namespace llvm {
+class MCObjectWriter;
+
 extern Target TheNios2StdTarget;
+
+MCObjectWriter *createNios2ELFObjectWriter(raw_ostream &OS,
+                                                uint8_t OSABI,
+                                                bool IsLittleEndian,
+                                                bool Is64Bit);
+
 }
 
 // Defines symbolic names for Nios2 registers.  This defines a mapping from

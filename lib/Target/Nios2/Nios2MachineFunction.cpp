@@ -11,7 +11,7 @@
 #include "Nios2InstrInfo.h"
 #include "Nios2Subtarget.h"
 #include "MCTargetDesc/Nios2BaseInfo.h"
-#include "llvm/Function.h"
+#include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
