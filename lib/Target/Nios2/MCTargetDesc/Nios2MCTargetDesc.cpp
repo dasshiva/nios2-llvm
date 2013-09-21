@@ -92,6 +92,14 @@ extern "C" void LLVMInitializeNios2TargetMC() {
   TargetRegistry::RegisterMCCodeGenInfo(TheNios2StdTarget,
                                         createNios2MCCodeGenInfo);
 
+  // Register the asm backend.
+  TargetRegistry::RegisterMCAsmBackend(TheNios2StdTarget,
+                                       createNios2AsmBackend);
+
+  // Register the MC Code Emitter
+  TargetRegistry::RegisterMCCodeEmitter(TheNios2StdTarget,
+                                        createNios2MCCodeEmitter);
+
   // Register the MC instruction info.
   TargetRegistry::RegisterMCInstrInfo(TheNios2StdTarget, createNios2MCInstrInfo);
 

@@ -18,7 +18,9 @@
 #include "llvm/Support/TargetRegistry.h"
 
 namespace llvm {
+class MCCodeEmitter;
 class MCObjectWriter;
+class MCAsmBackend;
 
 extern Target TheNios2StdTarget;
 
@@ -26,6 +28,15 @@ MCObjectWriter *createNios2ELFObjectWriter(raw_ostream &OS,
                                                 uint8_t OSABI,
                                                 bool IsLittleEndian,
                                                 bool Is64Bit);
+
+
+MCCodeEmitter *createNios2MCCodeEmitter(const MCInstrInfo &MCII,
+                                               const MCRegisterInfo &MRI,
+                                               const MCSubtargetInfo &STI,
+                                               MCContext &Ctx);
+
+MCAsmBackend *createNios2AsmBackend(const Target &T, StringRef TT,
+                                           StringRef CPU);
 
 }
 
@@ -42,3 +53,4 @@ MCObjectWriter *createNios2ELFObjectWriter(raw_ostream &OS,
 #include "Nios2GenSubtargetInfo.inc"
 
 #endif
+
