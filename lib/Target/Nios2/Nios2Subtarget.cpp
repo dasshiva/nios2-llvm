@@ -28,11 +28,11 @@ Nios2Subtarget::Nios2Subtarget(const std::string &TT, const std::string &CPU,
                              const std::string &FS, bool little,
                              Reloc::Model RM) :
   Nios2GenSubtargetInfo(TT, CPU, FS),
-  Nios2ArchVersion(Nios232), Nios2ABI(UnknownABI), IsLittle(little)
+  Nios2ArchVersion(Nios2Std), Nios2ABI(UnknownABI), IsLittle(little)
 {
   std::string CPUName = CPU;
   if (CPUName.empty())
-    CPUName = "mips32";
+    CPUName = "nios2";
 
   // Parse features string.
   ParseSubtargetFeatures(CPUName, FS);

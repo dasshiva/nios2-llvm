@@ -579,12 +579,14 @@ def : Nios2Pat<(i32 imm:$imm),
           (ORi (ORi ZERO, (HI16 imm:$imm)), (LO16 imm:$imm))>;
 
 // Carry Nios2Patterns
-def : Nios2Pat<(subc CPURegs:$lhs, CPURegs:$rhs),
-              (SUB CPURegs:$lhs, CPURegs:$rhs)>;
-def : Nios2Pat<(addc CPURegs:$lhs, CPURegs:$rhs),
+def : Nios2Pat<(add CPURegs:$lhs, CPURegs:$rhs),
               (ADD CPURegs:$lhs, CPURegs:$rhs)>;
-def : Nios2Pat<(addc  CPURegs:$src, immSExt16:$imm),
+def : Nios2Pat<(add  CPURegs:$src, immSExt16:$imm),
               (ADDi CPURegs:$src, imm:$imm)>;
+def : Nios2Pat<(sub CPURegs:$lhs, CPURegs:$rhs),
+              (SUB CPURegs:$lhs, CPURegs:$rhs)>;
+def : Nios2Pat<(sub CPURegs:$lhs, immSExt16:$imm),
+              (ADDi CPURegs:$lhs, (NEG16 imm:$imm))>;
 
 // hi/lo relocs
 def : Nios2Pat<(Nios2Hi tglobaladdr:$in), (ORhi ZERO, tglobaladdr:$in)>;
