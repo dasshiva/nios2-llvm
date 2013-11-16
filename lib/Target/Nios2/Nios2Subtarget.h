@@ -36,7 +36,7 @@ public:
 protected:
 
   enum Nios2ArchEnum {
-    Nios2Std,
+    Nios2Std
   };
 
   // Nios2 architecture version

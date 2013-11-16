@@ -62,6 +62,7 @@ const char *Nios2TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case Nios2ISD::GPRel:             return "Nios2ISD::GPRel";
   case Nios2ISD::Ret:               return "Nios2ISD::Ret";
   case Nios2ISD::Wrapper:           return "Nios2ISD::Wrapper";
+  case Nios2ISD::JmpLink:           return "Nios2ISD::JmpLink";
   default:                         return NULL;
   }
 }
@@ -613,8 +614,9 @@ SDValue
 Nios2TargetLowering::LowerMEMBARRIER(SDValue Op, SelectionDAG &DAG) const {
   unsigned SType = 0;
   DebugLoc dl = Op.getDebugLoc();
-  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
-                     DAG.getConstant(SType, MVT::i32));
+  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0));
+//  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
+//                     DAG.getConstant(SType, MVT::i32));
 }
 
 SDValue Nios2TargetLowering::LowerATOMIC_FENCE(SDValue Op,
@@ -623,8 +625,9 @@ SDValue Nios2TargetLowering::LowerATOMIC_FENCE(SDValue Op,
   // FIXME: Set SType for weaker fences where supported/appropriate.
   unsigned SType = 0;
   DebugLoc dl = Op.getDebugLoc();
-  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
-                     DAG.getConstant(SType, MVT::i32));
+  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0));
+//  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
+//                     DAG.getConstant(SType, MVT::i32));
 }
 
 //SDValue Nios2TargetLowering::LowerShiftLeftParts(SDValue Op,

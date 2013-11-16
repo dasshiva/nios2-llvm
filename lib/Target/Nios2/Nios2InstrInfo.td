@@ -11,6 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------
+// Nios2 Instruction predicates
+//===----------------------------------
+def RelocStatic : Predicate<"TM.getRelocationModel() == Reloc::Static">;
+
 
 //===----------------------------------------------------------------------===//
 // Nios2 profiles and nodes
@@ -87,7 +92,7 @@ def Nios2DivRemU   : SDNode<"Nios2ISD::DivRemU", SDT_Nios2DivRem,
 
 def Nios2Wrapper    : SDNode<"Nios2ISD::Wrapper", SDTIntBinOp>;
 
-def Nios2Sync : SDNode<"Nios2ISD::Sync", SDT_Sync, [SDNPHasChain,SDNPSideEffect]>;
+def Nios2Sync : SDNode<"Nios2ISD::Sync", SDTNone, [SDNPHasChain,SDNPSideEffect]>;
 
 class Nios2Pat<dag pattern, dag result> : Pat<pattern, result> {
 }
@@ -402,7 +407,7 @@ let isCall=1, hasDelaySlot=1, Defs = [RA] in {
     FR<op, func, 0, (outs), (ins RC:$rA),
        !strconcat(instr_asm, "\t$rA"), [(Nios2JmpLink RC:$rA)], IIBranch> {
     let rB = 0;
-    let rC = 31;
+    let rC = 0x1f;
     let shamt = 0;
   }
 
@@ -490,7 +495,7 @@ def ROL   : shift_rotate_reg<0x03, 0x01, "rol", rotl, CPURegs>;
 
 /// Compares
 defm CMPLT  : CompareSU<0x10, 0x30, "cmplt", setlt, setult>;
-defm CMPGE  : CompareSU<0x08, 0x28, "cmpge", setlt, setult>;
+defm CMPGE  : CompareSU<0x08, 0x28, "cmpge", setge, setuge>;
 defm CMPEQ  : CompareS<0x20, "cmpeq", seteq>;
 defm CMPNE  : CompareS<0x18, "cmpne", setne>;
 
@@ -506,16 +511,18 @@ def STB      : StoreM32<0x05, "stb", truncstorei8>;
 def STH      : StoreM32<0x0d, "sth", truncstorei16>;
 def STW      : StoreM32<0x15, "stw", store>;
 
+//def SYNC : FR<0x3a, 0x36, 0, (outs), (ins i32imm:$stype), "sync $stype",
+//                  [(Nios2Sync imm:$stype)], NoItinerary> {
 let hasSideEffects = 1 in
-def SYNC : FR<0x3a, 0x36, 0, (outs), (ins i32imm:$stype), "sync $stype",
-                  [(Nios2Sync imm:$stype)], NoItinerary> {
+def SYNC : FR<0x3a, 0x36, 0, (outs), (ins), "sync",
+                  [(Nios2Sync)], NoItinerary> {
   let rA = 0;
   let rB = 0;
   let rC = 0;
 }
 
 /// Jump and Branch Instructions
-def JMPi    : JumpFJ<0x01, "jmpi">;
+def JMPi    : JumpFJ<0x01, "jmpi">, Requires<[RelocStatic]>;
 def JMP     : IndirectBranch<JMPRegs>;
 def BR      : UncondBranch<0x06, "br">;
 def BEQ     : CBranch<0x26, "beq", seteq, CPURegs>;
@@ -529,6 +536,8 @@ def BGTU    : CBranchPseudo<"bgtu", setugt, CPURegs>;
 def BLE     : CBranchPseudo<"ble", setle, CPURegs>;
 def BLEU    : CBranchPseudo<"bleu", setule, CPURegs>;
 
+def CALL  : JumpLink<0, "call">;
+def CALLR : JumpLinkReg<0x3a, 0x1d, "callr", CPURegs>;
 def RET : RetBase<CPURegs>;
 
 /// Divide Instructions.
@@ -617,6 +626,13 @@ def : Nios2Pat<(add CPURegs:$gp, (Nios2GPRel tglobaladdr:$in)),
               (ADDi CPURegs:$gp, tglobaladdr:$in)>;
 def : Nios2Pat<(add CPURegs:$gp, (Nios2GPRel tconstpool:$in)),
               (ADDi CPURegs:$gp, tconstpool:$in)>;
+
+def : Nios2Pat<(Nios2JmpLink (i32 tglobaladdr:$dst)),
+              (CALL tglobaladdr:$dst)>;
+def : Nios2Pat<(Nios2JmpLink (i32 texternalsym:$dst)),
+              (CALL texternalsym:$dst)>;
+//def : Nios2Pat<(Nios2JmpLink CPURegs:$dst),
+//              (CALLR CPURegs:$dst)>;
 
 // wrapper_pic
 class WrapperPat<SDNode node, Instruction ADDiOp, RegisterClass RC>:

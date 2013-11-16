@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "mips-isel"
+#define DEBUG_TYPE "nios2-isel"
 #include "Nios2.h"
 #include "Nios2MachineFunction.h"
 #include "Nios2RegisterInfo.h"
