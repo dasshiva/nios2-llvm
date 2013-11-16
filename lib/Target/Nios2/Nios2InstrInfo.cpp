@@ -332,6 +332,32 @@ void Nios2InstrInfo::adjustStackPtr(unsigned SP, int64_t Amount,
   }
 }
 
+void Nios2InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
+                                   MachineBasicBlock::iterator I,
+                                   unsigned SrcReg, bool isKill, int FI,
+                                   const TargetRegisterClass *RC,
+                                   const TargetRegisterInfo *TRI) const {
+  DebugLoc DL;
+  if (I != MBB.end()) DL = I->getDebugLoc();
+  MachineMemOperand *MMO = GetMemOperand(MBB, FI, MachineMemOperand::MOStore);
+  unsigned Opc = Nios2::STW;
+  BuildMI(MBB, I, DL, get(Opc)).addReg(SrcReg, getKillRegState(isKill))
+    .addFrameIndex(FI).addImm(0).addMemOperand(MMO);
+}
+
+void Nios2InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
+                                    MachineBasicBlock::iterator I,
+                                    unsigned DestReg, int FI,
+                                    const TargetRegisterClass *RC,
+                                    const TargetRegisterInfo *TRI) const {
+  DebugLoc DL;
+  if (I != MBB.end()) DL = I->getDebugLoc();
+  MachineMemOperand *MMO = GetMemOperand(MBB, FI, MachineMemOperand::MOLoad);
+  unsigned Opc = Nios2::LDW;
+  BuildMI(MBB, I, DL, get(Opc), DestReg).addFrameIndex(FI).addImm(0)
+    .addMemOperand(MMO);
+}
+
 const Nios2RegisterInfo &Nios2InstrInfo::getRegisterInfo() const {
   return RI;
 }

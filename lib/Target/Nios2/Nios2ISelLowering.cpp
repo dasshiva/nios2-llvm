@@ -152,10 +152,12 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   maxStoresPerMemcpy = 16;
 }
 
-bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT) const {
+bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) const {
   MVT::SimpleValueType SVT = VT.getSimpleVT().SimpleTy;
   switch (SVT) {
   case MVT::i32:
+    if (Fast)
+      *Fast = true;
     return true;
   default:
     return false;
@@ -612,7 +614,7 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const
 //// TODO: set SType according to the desired memory barrier behavior.
 SDValue
 Nios2TargetLowering::LowerMEMBARRIER(SDValue Op, SelectionDAG &DAG) const {
-  unsigned SType = 0;
+//  unsigned SType = 0;
   DebugLoc dl = Op.getDebugLoc();
   return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0));
 //  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
@@ -623,7 +625,7 @@ SDValue Nios2TargetLowering::LowerATOMIC_FENCE(SDValue Op,
                                               SelectionDAG &DAG) const {
   // FIXME: Need pseudo-fence for 'singlethread' fences
   // FIXME: Set SType for weaker fences where supported/appropriate.
-  unsigned SType = 0;
+//  unsigned SType = 0;
   DebugLoc dl = Op.getDebugLoc();
   return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0));
 //  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),

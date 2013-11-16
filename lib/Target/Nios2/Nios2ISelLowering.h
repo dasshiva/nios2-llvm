@@ -56,7 +56,7 @@ namespace llvm {
 
     virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i32; }
 
-    virtual bool allowsUnalignedMemoryAccesses (EVT VT) const;
+    virtual bool allowsUnalignedMemoryAccesses (EVT VT, bool *Fast) const;
 
     /// LowerOperation - Provide custom lowering hooks for some operations.
     virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
