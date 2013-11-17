@@ -358,6 +358,31 @@ void Nios2InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     .addMemOperand(MMO);
 }
 
+void Nios2InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator I, DebugLoc DL,
+                                  unsigned DestReg, unsigned SrcReg,
+                                  bool KillSrc) const {
+  unsigned Opc = 0, ZeroReg = 0;
+
+  if (Nios2::CPURegsRegClass.contains(DestReg)) { // Copy to CPU Reg.
+    if (Nios2::CPURegsRegClass.contains(SrcReg))
+      Opc = Nios2::OR, ZeroReg = Nios2::ZERO;
+  }
+
+  assert(Opc && "Cannot copy registers");
+
+  MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(Opc));
+
+  if (DestReg)
+    MIB.addReg(DestReg, RegState::Define);
+
+  if (SrcReg)
+    MIB.addReg(SrcReg, getKillRegState(KillSrc));
+
+  if (ZeroReg)
+    MIB.addReg(ZeroReg);
+}
+
 const Nios2RegisterInfo &Nios2InstrInfo::getRegisterInfo() const {
   return RI;
 }

@@ -193,6 +193,27 @@ void Nios2RegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
   MI.getOperand(OpNo + 1).ChangeToImmediate(Offset);
 }
 
+// This function eliminate ADJCALLSTACKDOWN,
+// ADJCALLSTACKUP pseudo instructions
+void Nios2RegisterInfo::
+eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I) const {
+  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+
+  if (!TFI->hasReservedCallFrame(MF)) {
+    int64_t Amount = I->getOperand(0).getImm();
+
+    if (I->getOpcode() == Nios2::ADJCALLSTACKDOWN)
+      Amount = -Amount;
+
+    const Nios2InstrInfo *II = static_cast<const Nios2InstrInfo*>(&TII);
+
+    II->adjustStackPtr(Nios2::SP, Amount, MBB, I);
+  }
+
+  MBB.erase(I);
+}
+
 unsigned Nios2RegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();

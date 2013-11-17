@@ -55,10 +55,13 @@ public:
   virtual bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const;
 
   /// Stack Frame Processing Methods
-  void eliminateFrameIndex(MachineBasicBlock::iterator II,
+  virtual void eliminateFrameIndex(MachineBasicBlock::iterator II,
                            int SPAdj, RegScavenger *RS = NULL) const;
 
   void processFunctionBeforeFrameFinalized(MachineFunction &MF) const;
+
+  virtual void eliminateCallFramePseudoInstr(MachineFunction &MF,
+      MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
 
   /// Debug information queries.
   unsigned getFrameRegister(const MachineFunction &MF) const;
