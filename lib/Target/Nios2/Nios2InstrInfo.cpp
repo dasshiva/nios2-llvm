@@ -332,6 +332,22 @@ void Nios2InstrInfo::adjustStackPtr(unsigned SP, int64_t Amount,
   }
 }
 
+bool Nios2InstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const {
+  MachineBasicBlock &MBB = *MI->getParent();
+
+  switch(MI->getDesc().getOpcode()) {
+  default:
+    return false;
+  case Nios2::RetRA:
+    BuildMI(MBB, MI, MI->getDebugLoc(), get(Nios2::RET)).addReg(Nios2::RA);
+    break;
+  }
+
+  MBB.erase(MI);
+  return true;
+}
+
+
 void Nios2InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
                                    MachineBasicBlock::iterator I,
                                    unsigned SrcReg, bool isKill, int FI,

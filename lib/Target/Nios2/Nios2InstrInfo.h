@@ -53,6 +53,7 @@ public:
   void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
                       MachineBasicBlock::iterator I) const;
 
+  virtual bool expandPostRAPseudo(MachineBasicBlock::iterator MI) const;
 
   /// Branch Analysis
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
