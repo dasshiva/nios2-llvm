@@ -98,6 +98,25 @@ void Nios2AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 //
 //===----------------------------------------------------------------------===//
 
+/// EmitFunctionBodyStart - Targets can override this to emit stuff before
+/// the first basic block in the function.
+void Nios2AsmPrinter::EmitFunctionBodyStart() {
+  MCInstLowering.Initialize(Mang, &MF->getContext());
+
+  emitFrameDirective();
+
+  if (OutStreamer.hasRawTextSupport()) {
+    SmallString<128> Str;
+    raw_svector_ostream OS(Str);
+    printSavedRegsBitmask(OS);
+    OutStreamer.EmitRawText(OS.str());
+
+    OutStreamer.EmitRawText(StringRef("\t.set\tnoreorder"));
+    OutStreamer.EmitRawText(StringRef("\t.set\tnomacro"));
+    OutStreamer.EmitRawText(StringRef("\t.set\tnoat"));
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Mask directives
 //===----------------------------------------------------------------------===//

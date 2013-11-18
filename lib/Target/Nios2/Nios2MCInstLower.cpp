@@ -22,6 +22,7 @@
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/Target/Mangler.h"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -150,6 +151,7 @@ MCOperand Nios2MCInstLower::LowerOperand(const MachineOperand &MO,
 }
 
 void Nios2MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
+  DEBUG(dbgs() << " Lowering " << *MI);
   OutMI.setOpcode(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {

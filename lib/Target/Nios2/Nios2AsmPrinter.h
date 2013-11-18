@@ -47,9 +47,11 @@ public:
     return "Nios2 Assembly Printer";
   }
 
+
   virtual bool runOnMachineFunction(MachineFunction &MF);
 
   void EmitInstruction(const MachineInstr *MI);
+  virtual void EmitFunctionBodyStart();
   void printSavedRegsBitmask(raw_ostream &O);
   void printHex32(unsigned int Value, raw_ostream &O);
   void emitFrameDirective();

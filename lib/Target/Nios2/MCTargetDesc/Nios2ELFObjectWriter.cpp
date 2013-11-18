@@ -55,7 +55,7 @@ namespace {
 
 Nios2ELFObjectWriter::Nios2ELFObjectWriter(bool _is64Bit, uint8_t OSABI,
                                          bool _isN64, bool IsLittleEndian)
-  : MCELFObjectTargetWriter(_is64Bit, OSABI, ELF::EM_MIPS,
+  : MCELFObjectTargetWriter(_is64Bit, OSABI, ELF::EM_ALTERA_NIOS2,
                             /*HasRelocationAddend*/ (_isN64) ? true : false,
                             /*IsN64*/ _isN64) {}
 
