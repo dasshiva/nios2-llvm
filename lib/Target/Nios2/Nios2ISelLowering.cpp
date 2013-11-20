@@ -115,6 +115,8 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   setOperationAction(ISD::UINT_TO_FP,        MVT::i32,   Expand);
   setOperationAction(ISD::FP_TO_UINT,        MVT::i32,   Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,    Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8,    Expand);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16,   Expand);
   setOperationAction(ISD::CTPOP,             MVT::i32,   Expand);
   setOperationAction(ISD::CTTZ,              MVT::i32,   Expand);
   setOperationAction(ISD::CTTZ_ZERO_UNDEF,   MVT::i32,   Expand);
@@ -1968,7 +1970,7 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
        *
        */
       const DebugLoc DL = MI->getDebugLoc();
-      unsigned &res = MI->getOperand(0).getReg();
+      unsigned res = MI->getOperand(0).getReg();
       MachineOperand &a = MI->getOperand(1);
       MachineOperand &x = MI->getOperand(2);
       MachineOperand &y = MI->getOperand(3);
