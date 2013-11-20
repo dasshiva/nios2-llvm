@@ -16,7 +16,7 @@ entry:
 define <4 x i32> @sdiv_zero(<4 x i32> %var) {
 entry:
 ; CHECK: sdiv_zero
-; CHECK-NOT sra
+; CHECK-NOT: sra
 ; CHECK: ret
   %0 = sdiv <4 x i32> %var, <i32 0, i32 0, i32 0, i32 0>
   ret <4 x i32> %0
@@ -69,4 +69,12 @@ entry:
 ; CHECK: ret
   %a0 = sdiv <16 x i16> %var, <i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4, i16 4>
   ret <16 x i16> %a0
+}
+
+; CHECK: sdiv_non_splat
+; CHECK: idivl
+; CHECK: ret
+define <4 x i32> @sdiv_non_splat(<4 x i32> %x) {
+  %y = sdiv <4 x i32> %x, <i32 2, i32 0, i32 0, i32 0>
+  ret <4 x i32> %y
 }

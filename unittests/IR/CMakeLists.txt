@@ -10,12 +10,15 @@ set(IRSources
   DominatorTreeTest.cpp
   IRBuilderTest.cpp
   InstructionsTest.cpp
+  LegacyPassManagerTest.cpp
   MDBuilderTest.cpp
   MetadataTest.cpp
   PassManagerTest.cpp
+  PatternMatch.cpp
   TypeBuilderTest.cpp
   TypesTest.cpp
   ValueMapTest.cpp
+  ValueTest.cpp
   VerifierTest.cpp
   WaymarkTest.cpp
   )

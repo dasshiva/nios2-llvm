@@ -1,4 +1,4 @@
-//===-- InstructionSimplify.h - Fold instructions into simpler forms ------===//
+//===-- InstructionSimplify.h - Fold instrs into simpler forms --*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -13,6 +13,19 @@
 // returning a constant ("and i32 %x, 0" -> "0") or an already existing value
 // ("and i32 %x, %x" -> "%x").  If the simplification is also an instruction
 // then it dominates the original instruction.
+//
+// These routines implicitly resolve undef uses. The easiest way to be safe when
+// using these routines to obtain simplified values for existing instructions is
+// to always replace all uses of the instructions with the resulting simplified
+// values. This will prevent other code from seeing the same undef uses and
+// resolving them to different values.
+//
+// These routines are designed to tolerate moderately incomplete IR, such as
+// instructions that are not connected to basic blocks yet. However, they do
+// require that all the IR that they encounter be valid. In particular, they
+// require that all non-constant values be defined in the same function, and the
+// same call context of that function (and not split between caller and callee
+// contexts of a directly recursive call, for example).
 //
 //===----------------------------------------------------------------------===//
 

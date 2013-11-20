@@ -273,7 +273,64 @@ TEST(YAMLIO, TestReadWriteBuiltInTypes) {
   }
 }
 
+struct StringTypes {
+  llvm::StringRef str1;
+  llvm::StringRef str2;
+  llvm::StringRef str3;
+  llvm::StringRef str4;
+  llvm::StringRef str5;
+};
 
+namespace llvm {
+namespace yaml {
+  template <>
+  struct MappingTraits<StringTypes> {
+    static void mapping(IO &io, StringTypes& st) {
+      io.mapRequired("str1",      st.str1);
+      io.mapRequired("str2",      st.str2);
+      io.mapRequired("str3",      st.str3);
+      io.mapRequired("str4",      st.str4);
+      io.mapRequired("str5",      st.str5);
+    }
+  };
+}
+}
+
+TEST(YAMLIO, TestReadWriteStringTypes) {
+  std::string intermediate;
+  {
+    StringTypes map;
+    map.str1 = "'aaa";
+    map.str2 = "\"bbb";
+    map.str3 = "`ccc";
+    map.str4 = "@ddd";
+    map.str5 = "";
+
+    llvm::raw_string_ostream ostr(intermediate);
+    Output yout(ostr);
+    yout << map;
+  }
+
+  llvm::StringRef flowOut(intermediate);
+  EXPECT_NE(llvm::StringRef::npos, flowOut.find("'''aaa"));
+  EXPECT_NE(llvm::StringRef::npos, flowOut.find("'\"bbb'"));
+  EXPECT_NE(llvm::StringRef::npos, flowOut.find("'`ccc'"));
+  EXPECT_NE(llvm::StringRef::npos, flowOut.find("'@ddd'"));
+  EXPECT_NE(llvm::StringRef::npos, flowOut.find("''\n"));
+
+  {
+    Input yin(intermediate);
+    StringTypes map;
+    yin >> map;
+
+    EXPECT_FALSE(yin.error());
+    EXPECT_TRUE(map.str1.equals("'aaa"));
+    EXPECT_TRUE(map.str2.equals("\"bbb"));
+    EXPECT_TRUE(map.str3.equals("`ccc"));
+    EXPECT_TRUE(map.str4.equals("@ddd"));
+    EXPECT_TRUE(map.str5.equals(""));
+  }
+}
 
 //===----------------------------------------------------------------------===//
 //  Test ScalarEnumerationTraits
@@ -600,9 +657,9 @@ TEST(YAMLIO, TestReadWriteMyFlowSequence) {
     map.numbers.push_back(1024);
 
     llvm::raw_string_ostream ostr(intermediate);
-    Output yout(ostr); 
+    Output yout(ostr);
     yout << map;
-    
+
     // Verify sequences were written in flow style
     ostr.flush();
     llvm::StringRef flowOut(intermediate);
@@ -931,6 +988,161 @@ TEST(YAMLIO, TestSequenceDocListWriteAndRead) {
     EXPECT_EQ(map2.bar, 0);
   }
 }
+
+//===----------------------------------------------------------------------===//
+//  Test document tags
+//===----------------------------------------------------------------------===//
+
+struct MyDouble {
+  MyDouble() : value(0.0) { }
+  MyDouble(double x) : value(x) { }
+  double value;
+};
+
+LLVM_YAML_IS_DOCUMENT_LIST_VECTOR(MyDouble)
+
+
+namespace llvm {
+namespace yaml {
+  template <>
+  struct MappingTraits<MyDouble> {
+    static void mapping(IO &io, MyDouble &d) {
+      if (io.mapTag("!decimal", true)) {
+        mappingDecimal(io, d);
+      } else if (io.mapTag("!fraction")) {
+        mappingFraction(io, d);
+      }
+    }
+    static void mappingDecimal(IO &io, MyDouble &d) {
+      io.mapRequired("value", d.value);
+    }
+    static void mappingFraction(IO &io, MyDouble &d) {
+        double num, denom;
+        io.mapRequired("numerator",      num);
+        io.mapRequired("denominator",    denom);
+        // convert fraction to double
+        d.value = num/denom;
+    }
+  };
+ }
+}
+
+
+//
+// Test the reading of two different tagged yaml documents.
+//
+TEST(YAMLIO, TestTaggedDocuments) {
+  std::vector<MyDouble> docList;
+  Input yin("--- !decimal\nvalue:  3.0\n"
+            "--- !fraction\nnumerator:  9.0\ndenominator:  2\n...\n");
+  yin >> docList;
+  EXPECT_FALSE(yin.error());
+  EXPECT_EQ(docList.size(), 2UL);
+  EXPECT_EQ(docList[0].value, 3.0);
+  EXPECT_EQ(docList[1].value, 4.5);
+}
+
+
+
+//
+// Test writing then reading back tagged documents
+//
+TEST(YAMLIO, TestTaggedDocumentsWriteAndRead) {
+  std::string intermediate;
+  {
+    MyDouble a(10.25);
+    MyDouble b(-3.75);
+    std::vector<MyDouble> docList;
+    docList.push_back(a);
+    docList.push_back(b);
+
+    llvm::raw_string_ostream ostr(intermediate);
+    Output yout(ostr);
+    yout << docList;
+  }
+
+  {
+    Input yin(intermediate);
+    std::vector<MyDouble> docList2;
+    yin >> docList2;
+
+    EXPECT_FALSE(yin.error());
+    EXPECT_EQ(docList2.size(), 2UL);
+    EXPECT_EQ(docList2[0].value, 10.25);
+    EXPECT_EQ(docList2[1].value, -3.75);
+  }
+}
+
+
+//===----------------------------------------------------------------------===//
+//  Test dyn_cast<> on IO object 
+//===----------------------------------------------------------------------===//
+
+struct DynCast {
+  int value;
+};
+typedef std::vector<DynCast> DynCastSequence;
+
+LLVM_YAML_IS_SEQUENCE_VECTOR(DynCast)
+
+namespace llvm {
+namespace yaml {
+  template <>
+  struct MappingTraits<DynCast> {
+    static void mapping(IO &io, DynCast& info) {
+      // Change 10 to 13 when writing yaml.
+      if (Output *output = dyn_cast<Output>(&io)) {
+        (void)output;
+        if (info.value == 10)
+          info.value = 13;
+      }
+      io.mapRequired("value", info.value);
+      // Change 20 to 23 when parsing yaml.
+      if (Input *input = dyn_cast<Input>(&io)) {
+        (void)input;
+        if (info.value == 20)
+          info.value = 23;
+      }
+    }
+  };
+}
+}
+
+//
+// Test writing then reading back a sequence of mappings
+//
+TEST(YAMLIO, TestDynCast) {
+  std::string intermediate;
+  {
+    DynCast entry1;
+    entry1.value = 10;
+    DynCast entry2;
+    entry2.value = 20;
+    DynCast entry3;
+    entry3.value = 30;
+    DynCastSequence seq;
+    seq.push_back(entry1);
+    seq.push_back(entry2);
+    seq.push_back(entry3);
+
+    llvm::raw_string_ostream ostr(intermediate);
+    Output yout(ostr);
+    yout << seq;
+  }
+
+  {
+    Input yin(intermediate);
+    DynCastSequence seq2;
+    yin >> seq2;
+
+    EXPECT_FALSE(yin.error());
+    EXPECT_EQ(seq2.size(), 3UL);
+    EXPECT_EQ(seq2[0].value, 13);   // Verify changed to 13.
+    EXPECT_EQ(seq2[1].value, 23);   // Verify changed to 23.
+    EXPECT_EQ(seq2[2].value, 30);   // Verify stays same.
+  }
+}
+
 
 
 //===----------------------------------------------------------------------===//
@@ -1297,3 +1509,66 @@ TEST(YAMLIO, TestReadBuiltInTypesHex64Error) {
   EXPECT_TRUE(yin.error());
 }
 
+struct OptionalTest {
+  std::vector<int> Numbers;
+};
+
+struct OptionalTestSeq {
+  std::vector<OptionalTest> Tests;
+};
+
+LLVM_YAML_IS_SEQUENCE_VECTOR(OptionalTest)
+namespace llvm {
+namespace yaml {
+  template <>
+  struct MappingTraits<OptionalTest> {
+    static void mapping(IO& IO, OptionalTest &OT) {
+      IO.mapOptional("Numbers", OT.Numbers);
+    }
+  };
+
+  template <>
+  struct MappingTraits<OptionalTestSeq> {
+    static void mapping(IO &IO, OptionalTestSeq &OTS) {
+      IO.mapOptional("Tests", OTS.Tests);
+    }
+  };
+}
+}
+
+TEST(YAMLIO, SequenceElideTest) {
+  // Test that writing out a purely optional structure with its fields set to
+  // default followed by other data is properly read back in.
+  OptionalTestSeq Seq;
+  OptionalTest One, Two, Three, Four;
+  int N[] = {1, 2, 3};
+  Three.Numbers.assign(N, N + 3);
+  Seq.Tests.push_back(One);
+  Seq.Tests.push_back(Two);
+  Seq.Tests.push_back(Three);
+  Seq.Tests.push_back(Four);
+
+  std::string intermediate;
+  {
+    llvm::raw_string_ostream ostr(intermediate);
+    Output yout(ostr);
+    yout << Seq;
+  }
+
+  Input yin(intermediate);
+  OptionalTestSeq Seq2;
+  yin >> Seq2;
+
+  EXPECT_FALSE(yin.error());
+
+  EXPECT_EQ(4UL, Seq2.Tests.size());
+
+  EXPECT_TRUE(Seq2.Tests[0].Numbers.empty());
+  EXPECT_TRUE(Seq2.Tests[1].Numbers.empty());
+
+  EXPECT_EQ(1, Seq2.Tests[2].Numbers[0]);
+  EXPECT_EQ(2, Seq2.Tests[2].Numbers[1]);
+  EXPECT_EQ(3, Seq2.Tests[2].Numbers[2]);
+
+  EXPECT_TRUE(Seq2.Tests[3].Numbers.empty());
+}

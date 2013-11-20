@@ -61,12 +61,22 @@ void DecodeMOVLHPSMask(unsigned NElts, SmallVectorImpl<int> &ShuffleMask) {
     ShuffleMask.push_back(NElts+i);
 }
 
-void DecodePALIGNMask(MVT VT, unsigned Imm, SmallVectorImpl<int> &ShuffleMask) {
+void DecodePALIGNRMask(MVT VT, unsigned Imm,
+                       SmallVectorImpl<int> &ShuffleMask) {
   unsigned NumElts = VT.getVectorNumElements();
   unsigned Offset = Imm * (VT.getVectorElementType().getSizeInBits() / 8);
 
-  for (unsigned i = 0; i != NumElts; ++i)
-    ShuffleMask.push_back((i + Offset) % (NumElts * 2));
+  unsigned NumLanes = VT.getSizeInBits() / 128;
+  unsigned NumLaneElts = NumElts / NumLanes;
+
+  for (unsigned l = 0; l != NumElts; l += NumLaneElts) {
+    for (unsigned i = 0; i != NumLaneElts; ++i) {
+      unsigned Base = i + Offset;
+      // if i+offset is out of this lane then we actually need the other source
+      if (Base >= NumLaneElts) Base += NumElts - NumLaneElts;
+      ShuffleMask.push_back(Base + l);
+    }
+  }
 }
 
 /// DecodePSHUFMask - This decodes the shuffle masks for pshufd, and vpermilp*.

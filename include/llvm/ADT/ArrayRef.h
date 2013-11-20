@@ -10,6 +10,7 @@
 #ifndef LLVM_ADT_ARRAYREF_H
 #define LLVM_ADT_ARRAYREF_H
 
+#include "llvm/ADT/None.h"
 #include "llvm/ADT/SmallVector.h"
 #include <vector>
 
@@ -49,6 +50,9 @@ namespace llvm {
     /// Construct an empty ArrayRef.
     /*implicit*/ ArrayRef() : Data(0), Length(0) {}
 
+    /// Construct an empty ArrayRef from None.
+    /*implicit*/ ArrayRef(NoneType) : Data(0), Length(0) {}
+
     /// Construct an ArrayRef from a single element.
     /*implicit*/ ArrayRef(const T &OneElt)
       : Data(&OneElt), Length(1) {}
@@ -76,8 +80,15 @@ namespace llvm {
 
     /// Construct an ArrayRef from a C array.
     template <size_t N>
-    /*implicit*/ ArrayRef(const T (&Arr)[N])
+    /*implicit*/ LLVM_CONSTEXPR ArrayRef(const T (&Arr)[N])
       : Data(Arr), Length(N) {}
+
+#if LLVM_HAS_INITIALIZER_LISTS
+    /// Construct an ArrayRef from a std::initializer_list.
+    /*implicit*/ ArrayRef(const std::initializer_list<T> &Vec)
+    : Data(Vec.begin() == Vec.end() ? (T*)0 : Vec.begin()),
+      Length(Vec.size()) {}
+#endif
 
     /// @}
     /// @name Simple Operations
@@ -174,8 +185,11 @@ namespace llvm {
   public:
     typedef T *iterator;
 
-    /// Construct an empty ArrayRef.
+    /// Construct an empty MutableArrayRef.
     /*implicit*/ MutableArrayRef() : ArrayRef<T>() {}
+
+    /// Construct an empty MutableArrayRef from None.
+    /*implicit*/ MutableArrayRef(NoneType) : ArrayRef<T>() {}
 
     /// Construct an MutableArrayRef from a single element.
     /*implicit*/ MutableArrayRef(T &OneElt) : ArrayRef<T>(OneElt) {}

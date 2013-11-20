@@ -1,6 +1,6 @@
-; RUN: llc < %s | FileCheck %s
+; RUN: opt < %s -loop-reduce -S | FileCheck %s
 ;
-; Test LSR's ability to prune formulae that refer to nonexistant
+; Test LSR's ability to prune formulae that refer to nonexistent
 ; AddRecs in other loops.
 ;
 ; Unable to reduce this case further because it requires LSR to exceed
@@ -14,14 +14,11 @@
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
 target triple = "x86_64-apple-darwin"
 
-; CHECK: @test
-; CHECK: # %for.body{{$}}
-; dummyiv copy should be removed
-; CHECK-NOT: movq
-; CHECK: # %for.cond19.preheader
-; dummycnt should be removed
-; CHECK-NOT: incq
-; CHECK: # %for.body23{{$}}
+; CHECK-LABEL: @test(
+; CHECK: for.body:
+; CHECK: %lsr.iv
+; CHECK-NOT: %dummyout
+; CHECK: ret
 define i64 @test(i64 %count, float* nocapture %srcrow, i32* nocapture %destrow) nounwind uwtable ssp {
 entry:
   %cmp34 = icmp eq i64 %count, 0

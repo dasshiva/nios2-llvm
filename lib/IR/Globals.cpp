@@ -82,13 +82,16 @@ bool GlobalValue::isDeclaration() const {
 //===----------------------------------------------------------------------===//
 
 GlobalVariable::GlobalVariable(Type *Ty, bool constant, LinkageTypes Link,
-                               Constant *InitVal, const Twine &Name,
-                               ThreadLocalMode TLMode, unsigned AddressSpace)
+                               Constant *InitVal,
+                               const Twine &Name, ThreadLocalMode TLMode,
+                               unsigned AddressSpace,
+                               bool isExternallyInitialized)
   : GlobalValue(PointerType::get(Ty, AddressSpace),
                 Value::GlobalVariableVal,
                 OperandTraits<GlobalVariable>::op_begin(this),
                 InitVal != 0, Link, Name),
-    isConstantGlobal(constant), threadLocalMode(TLMode) {
+    isConstantGlobal(constant), threadLocalMode(TLMode),
+    isExternallyInitializedConstant(isExternallyInitialized) {
   if (InitVal) {
     assert(InitVal->getType() == Ty &&
            "Initializer should be the same type as the GlobalVariable!");
@@ -102,12 +105,14 @@ GlobalVariable::GlobalVariable(Module &M, Type *Ty, bool constant,
                                LinkageTypes Link, Constant *InitVal,
                                const Twine &Name,
                                GlobalVariable *Before, ThreadLocalMode TLMode,
-                               unsigned AddressSpace)
+                               unsigned AddressSpace,
+                               bool isExternallyInitialized)
   : GlobalValue(PointerType::get(Ty, AddressSpace),
                 Value::GlobalVariableVal,
                 OperandTraits<GlobalVariable>::op_begin(this),
                 InitVal != 0, Link, Name),
-    isConstantGlobal(constant), threadLocalMode(TLMode) {
+    isConstantGlobal(constant), threadLocalMode(TLMode),
+    isExternallyInitializedConstant(isExternallyInitialized) {
   if (InitVal) {
     assert(InitVal->getType() == Ty &&
            "Initializer should be the same type as the GlobalVariable!");
@@ -224,14 +229,14 @@ void GlobalAlias::setAliasee(Constant *Aliasee) {
   setOperand(0, Aliasee);
 }
 
-const GlobalValue *GlobalAlias::getAliasedGlobal() const {
-  const Constant *C = getAliasee();
+GlobalValue *GlobalAlias::getAliasedGlobal() {
+  Constant *C = getAliasee();
   if (C == 0) return 0;
   
-  if (const GlobalValue *GV = dyn_cast<GlobalValue>(C))
+  if (GlobalValue *GV = dyn_cast<GlobalValue>(C))
     return GV;
 
-  const ConstantExpr *CE = cast<ConstantExpr>(C);
+  ConstantExpr *CE = cast<ConstantExpr>(C);
   assert((CE->getOpcode() == Instruction::BitCast || 
           CE->getOpcode() == Instruction::GetElementPtr) &&
          "Unsupported aliasee");
@@ -239,18 +244,18 @@ const GlobalValue *GlobalAlias::getAliasedGlobal() const {
   return cast<GlobalValue>(CE->getOperand(0));
 }
 
-const GlobalValue *GlobalAlias::resolveAliasedGlobal(bool stopOnWeak) const {
-  SmallPtrSet<const GlobalValue*, 3> Visited;
+GlobalValue *GlobalAlias::resolveAliasedGlobal(bool stopOnWeak) {
+  SmallPtrSet<GlobalValue*, 3> Visited;
 
   // Check if we need to stop early.
   if (stopOnWeak && mayBeOverridden())
     return this;
 
-  const GlobalValue *GV = getAliasedGlobal();
+  GlobalValue *GV = getAliasedGlobal();
   Visited.insert(GV);
 
   // Iterate over aliasing chain, stopping on weak alias if necessary.
-  while (const GlobalAlias *GA = dyn_cast<GlobalAlias>(GV)) {
+  while (GlobalAlias *GA = dyn_cast<GlobalAlias>(GV)) {
     if (stopOnWeak && GA->mayBeOverridden())
       break;
 

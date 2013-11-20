@@ -88,8 +88,17 @@ unsigned TargetTransformInfo::getUserCost(const User *U) const {
   return PrevTTI->getUserCost(U);
 }
 
+bool TargetTransformInfo::hasBranchDivergence() const {
+  return PrevTTI->hasBranchDivergence();
+}
+
 bool TargetTransformInfo::isLoweredToCall(const Function *F) const {
   return PrevTTI->isLoweredToCall(F);
+}
+
+void TargetTransformInfo::getUnrollingPreferences(Loop *L,
+                            UnrollingPreferences &UP) const {
+  PrevTTI->getUnrollingPreferences(L, UP);
 }
 
 bool TargetTransformInfo::isLegalAddImmediate(int64_t Imm) const {
@@ -106,6 +115,14 @@ bool TargetTransformInfo::isLegalAddressingMode(Type *Ty, GlobalValue *BaseGV,
                                                 int64_t Scale) const {
   return PrevTTI->isLegalAddressingMode(Ty, BaseGV, BaseOffset, HasBaseReg,
                                         Scale);
+}
+
+int TargetTransformInfo::getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
+                                              int64_t BaseOffset,
+                                              bool HasBaseReg,
+                                              int64_t Scale) const {
+  return PrevTTI->getScalingFactorCost(Ty, BaseGV, BaseOffset, HasBaseReg,
+                                       Scale);
 }
 
 bool TargetTransformInfo::isTruncateFree(Type *Ty1, Type *Ty2) const {
@@ -133,6 +150,10 @@ TargetTransformInfo::getPopcntSupport(unsigned IntTyWidthInBit) const {
   return PrevTTI->getPopcntSupport(IntTyWidthInBit);
 }
 
+bool TargetTransformInfo::haveFastSqrt(Type *Ty) const {
+  return PrevTTI->haveFastSqrt(Ty);
+}
+
 unsigned TargetTransformInfo::getIntImmCost(const APInt &Imm, Type *Ty) const {
   return PrevTTI->getIntImmCost(Imm, Ty);
 }
@@ -150,8 +171,10 @@ unsigned TargetTransformInfo::getMaximumUnrollFactor() const {
 }
 
 unsigned TargetTransformInfo::getArithmeticInstrCost(unsigned Opcode,
-                                                     Type *Ty) const {
-  return PrevTTI->getArithmeticInstrCost(Opcode, Ty);
+                                                Type *Ty,
+                                                OperandValueKind Op1Info,
+                                                OperandValueKind Op2Info) const {
+  return PrevTTI->getArithmeticInstrCost(Opcode, Ty, Op1Info, Op2Info);
 }
 
 unsigned TargetTransformInfo::getShuffleCost(ShuffleKind Kind, Type *Tp,
@@ -196,6 +219,15 @@ unsigned TargetTransformInfo::getNumberOfParts(Type *Tp) const {
   return PrevTTI->getNumberOfParts(Tp);
 }
 
+unsigned TargetTransformInfo::getAddressComputationCost(Type *Tp,
+                                                        bool IsComplex) const {
+  return PrevTTI->getAddressComputationCost(Tp, IsComplex);
+}
+
+unsigned TargetTransformInfo::getReductionCost(unsigned Opcode, Type *Ty,
+                                               bool IsPairwise) const {
+  return PrevTTI->getReductionCost(Opcode, Ty, IsPairwise);
+}
 
 namespace {
 
@@ -247,26 +279,34 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
       // Otherwise, the default basic cost is used.
       return TCC_Basic;
 
-    case Instruction::IntToPtr:
+    case Instruction::IntToPtr: {
+      if (!DL)
+        return TCC_Basic;
+
       // An inttoptr cast is free so long as the input is a legal integer type
       // which doesn't contain values outside the range of a pointer.
-      if (DL && DL->isLegalInteger(OpTy->getScalarSizeInBits()) &&
-          OpTy->getScalarSizeInBits() <= DL->getPointerSizeInBits())
+      unsigned OpSize = OpTy->getScalarSizeInBits();
+      if (DL->isLegalInteger(OpSize) &&
+          OpSize <= DL->getPointerTypeSizeInBits(Ty))
         return TCC_Free;
 
       // Otherwise it's not a no-op.
       return TCC_Basic;
+    }
+    case Instruction::PtrToInt: {
+      if (!DL)
+        return TCC_Basic;
 
-    case Instruction::PtrToInt:
       // A ptrtoint cast is free so long as the result is large enough to store
       // the pointer, and a legal integer type.
-      if (DL && DL->isLegalInteger(OpTy->getScalarSizeInBits()) &&
-          OpTy->getScalarSizeInBits() >= DL->getPointerSizeInBits())
+      unsigned DestSize = Ty->getScalarSizeInBits();
+      if (DL->isLegalInteger(DestSize) &&
+          DestSize >= DL->getPointerTypeSizeInBits(OpTy))
         return TCC_Free;
 
       // Otherwise it's not a no-op.
       return TCC_Basic;
-
+    }
     case Instruction::Trunc:
       // trunc to a native type is free (assuming the target has compare and
       // shift-right of the same width).
@@ -406,6 +446,8 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
                                 U->getOperand(0)->getType() : 0);
   }
 
+  bool hasBranchDivergence() const { return false; }
+
   bool isLoweredToCall(const Function *F) const {
     // FIXME: These should almost certainly not be handled here, and instead
     // handled with the help of TLI or the target itself. This was largely
@@ -437,6 +479,8 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
     return true;
   }
 
+  void getUnrollingPreferences(Loop *, UnrollingPreferences &) const { }
+
   bool isLegalAddImmediate(int64_t Imm) const {
     return false;
   }
@@ -451,6 +495,15 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
     // the implementation of LSR.
     return !BaseGV && BaseOffset == 0 && Scale <= 1;
   }
+
+  int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV, int64_t BaseOffset,
+                           bool HasBaseReg, int64_t Scale) const {
+    // Guess that all legal addressing mode are free.
+    if(isLegalAddressingMode(Ty, BaseGV, BaseOffset, HasBaseReg, Scale))
+      return 0;
+    return -1;
+  }
+
 
   bool isTruncateFree(Type *Ty1, Type *Ty2) const {
     return false;
@@ -476,6 +529,10 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
     return PSK_Software;
   }
 
+  bool haveFastSqrt(Type *Ty) const {
+    return false;
+  }
+
   unsigned getIntImmCost(const APInt &Imm, Type *Ty) const {
     return 1;
   }
@@ -492,7 +549,8 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
     return 1;
   }
 
-  unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty) const {
+  unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty, OperandValueKind,
+                                  OperandValueKind) const {
     return 1;
   }
 
@@ -534,6 +592,14 @@ struct NoTTI : ImmutablePass, TargetTransformInfo {
 
   unsigned getNumberOfParts(Type *Tp) const {
     return 0;
+  }
+
+  unsigned getAddressComputationCost(Type *Tp, bool) const {
+    return 0;
+  }
+
+  unsigned getReductionCost(unsigned, Type *, bool) const {
+    return 1;
   }
 };
 

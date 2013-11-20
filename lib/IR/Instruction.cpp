@@ -223,18 +223,19 @@ const char *Instruction::getOpcodeName(unsigned OpCode) {
   case GetElementPtr: return "getelementptr";
 
   // Convert instructions...
-  case Trunc:     return "trunc";
-  case ZExt:      return "zext";
-  case SExt:      return "sext";
-  case FPTrunc:   return "fptrunc";
-  case FPExt:     return "fpext";
-  case FPToUI:    return "fptoui";
-  case FPToSI:    return "fptosi";
-  case UIToFP:    return "uitofp";
-  case SIToFP:    return "sitofp";
-  case IntToPtr:  return "inttoptr";
-  case PtrToInt:  return "ptrtoint";
-  case BitCast:   return "bitcast";
+  case Trunc:         return "trunc";
+  case ZExt:          return "zext";
+  case SExt:          return "sext";
+  case FPTrunc:       return "fptrunc";
+  case FPExt:         return "fpext";
+  case FPToUI:        return "fptoui";
+  case FPToSI:        return "fptosi";
+  case UIToFP:        return "uitofp";
+  case SIToFP:        return "sitofp";
+  case IntToPtr:      return "inttoptr";
+  case PtrToInt:      return "ptrtoint";
+  case BitCast:       return "bitcast";
+  case AddrSpaceCast: return "addrspacecast";
 
   // Other instructions...
   case ICmp:           return "icmp";
@@ -455,12 +456,16 @@ bool Instruction::mayWriteToMemory() const {
   }
 }
 
-/// mayThrow - Return true if this instruction may throw an exception.
-///
 bool Instruction::mayThrow() const {
   if (const CallInst *CI = dyn_cast<CallInst>(this))
     return !CI->doesNotThrow();
   return isa<ResumeInst>(this);
+}
+
+bool Instruction::mayReturn() const {
+  if (const CallInst *CI = dyn_cast<CallInst>(this))
+    return !CI->doesNotReturn();
+  return true;
 }
 
 /// isAssociative - Return true if the instruction is associative:

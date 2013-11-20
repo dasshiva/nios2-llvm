@@ -72,6 +72,15 @@ STATISTIC(NumThunksWritten, "Number of thunks generated");
 STATISTIC(NumAliasesWritten, "Number of aliases generated");
 STATISTIC(NumDoubleWeak, "Number of new functions created");
 
+/// Returns the type id for a type to be hashed. We turn pointer types into
+/// integers here because the actual compare logic below considers pointers and
+/// integers of the same size as equal.
+static Type::TypeID getTypeIDForHash(Type *Ty) {
+  if (Ty->isPointerTy())
+    return Type::IntegerTyID;
+  return Ty->getTypeID();
+}
+
 /// Creates a hash-code for the function which is the same for any two
 /// functions that will compare equal, without looking at the instructions
 /// inside the function.
@@ -83,9 +92,9 @@ static unsigned profileFunction(const Function *F) {
   ID.AddInteger(F->getCallingConv());
   ID.AddBoolean(F->hasGC());
   ID.AddBoolean(FTy->isVarArg());
-  ID.AddInteger(FTy->getReturnType()->getTypeID());
+  ID.AddInteger(getTypeIDForHash(FTy->getReturnType()));
   for (unsigned i = 0, e = FTy->getNumParams(); i != e; ++i)
-    ID.AddInteger(FTy->getParamType(i)->getTypeID());
+    ID.AddInteger(getTypeIDForHash(FTy->getParamType(i)));
   return ID.ComputeHash();
 }
 
@@ -200,15 +209,17 @@ private:
 
 // Any two pointers in the same address space are equivalent, intptr_t and
 // pointers are equivalent. Otherwise, standard type equivalence rules apply.
-bool FunctionComparator::isEquivalentType(Type *Ty1,
-                                          Type *Ty2) const {
+bool FunctionComparator::isEquivalentType(Type *Ty1, Type *Ty2) const {
   if (Ty1 == Ty2)
     return true;
   if (Ty1->getTypeID() != Ty2->getTypeID()) {
     if (TD) {
-      LLVMContext &Ctx = Ty1->getContext();
-      if (isa<PointerType>(Ty1) && Ty2 == TD->getIntPtrType(Ctx)) return true;
-      if (isa<PointerType>(Ty2) && Ty1 == TD->getIntPtrType(Ctx)) return true;
+
+      if (isa<PointerType>(Ty1) && Ty2 == TD->getIntPtrType(Ty1))
+        return true;
+
+      if (isa<PointerType>(Ty2) && Ty1 == TD->getIntPtrType(Ty2))
+        return true;
     }
     return false;
   }
@@ -344,14 +355,19 @@ bool FunctionComparator::isEquivalentOperation(const Instruction *I1,
 // Determine whether two GEP operations perform the same underlying arithmetic.
 bool FunctionComparator::isEquivalentGEP(const GEPOperator *GEP1,
                                          const GEPOperator *GEP2) {
-  // When we have target data, we can reduce the GEP down to the value in bytes
-  // added to the address.
-  unsigned BitWidth = TD ? TD->getPointerSizeInBits() : 1;
-  APInt Offset1(BitWidth, 0), Offset2(BitWidth, 0);
-  if (TD &&
-      GEP1->accumulateConstantOffset(*TD, Offset1) &&
-      GEP2->accumulateConstantOffset(*TD, Offset2)) {
-    return Offset1 == Offset2;
+  unsigned AS = GEP1->getPointerAddressSpace();
+  if (AS != GEP2->getPointerAddressSpace())
+    return false;
+
+  if (TD) {
+    // When we have target data, we can reduce the GEP down to the value in bytes
+    // added to the address.
+    unsigned BitWidth = TD ? TD->getPointerSizeInBits(AS) : 1;
+    APInt Offset1(BitWidth, 0), Offset2(BitWidth, 0);
+    if (GEP1->accumulateConstantOffset(*TD, Offset1) &&
+        GEP2->accumulateConstantOffset(*TD, Offset2)) {
+      return Offset1 == Offset2;
+    }
   }
 
   if (GEP1->getPointerOperand()->getType() !=
@@ -705,6 +721,19 @@ void MergeFunctions::writeThunkOrAlias(Function *F, Function *G) {
   writeThunk(F, G);
 }
 
+// Helper for writeThunk,
+// Selects proper bitcast operation,
+// but a bit simplier then CastInst::getCastOpcode.
+static Value* createCast(IRBuilder<false> &Builder, Value *V, Type *DestTy) {
+  Type *SrcTy = V->getType();
+  if (SrcTy->isIntegerTy() && DestTy->isPointerTy())
+    return Builder.CreateIntToPtr(V, DestTy);
+  else if (SrcTy->isPointerTy() && DestTy->isIntegerTy())
+    return Builder.CreatePtrToInt(V, DestTy);
+  else
+    return Builder.CreateBitCast(V, DestTy);
+}
+
 // Replace G with a simple tail call to bitcast(F). Also replace direct uses
 // of G with bitcast(F). Deletes G.
 void MergeFunctions::writeThunk(Function *F, Function *G) {
@@ -730,7 +759,7 @@ void MergeFunctions::writeThunk(Function *F, Function *G) {
   FunctionType *FFTy = F->getFunctionType();
   for (Function::arg_iterator AI = NewG->arg_begin(), AE = NewG->arg_end();
        AI != AE; ++AI) {
-    Args.push_back(Builder.CreateBitCast(AI, FFTy->getParamType(i)));
+    Args.push_back(createCast(Builder, (Value*)AI, FFTy->getParamType(i)));
     ++i;
   }
 
@@ -740,7 +769,7 @@ void MergeFunctions::writeThunk(Function *F, Function *G) {
   if (NewG->getReturnType()->isVoidTy()) {
     Builder.CreateRetVoid();
   } else {
-    Builder.CreateRet(Builder.CreateBitCast(CI, NewG->getReturnType()));
+    Builder.CreateRet(createCast(Builder, CI, NewG->getReturnType()));
   }
 
   NewG->copyAttributesFrom(G);
@@ -814,6 +843,18 @@ bool MergeFunctions::insert(ComparableFunction &NewF) {
   }
 
   const ComparableFunction &OldF = *Result.first;
+
+  // Don't merge tiny functions, since it can just end up making the function
+  // larger.
+  // FIXME: Should still merge them if they are unnamed_addr and produce an
+  // alias.
+  if (NewF.getFunc()->size() == 1) {
+    if (NewF.getFunc()->front().size() <= 2) {
+      DEBUG(dbgs() << NewF.getFunc()->getName()
+            << " is to small to bother merging\n");
+      return false;
+    }
+  }
 
   // Never thunk a strong function to a weak function.
   assert(!OldF.getFunc()->mayBeOverridden() ||

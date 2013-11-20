@@ -1,7 +1,6 @@
-# RUN: llvm-mc %s -triple=mipsel-unknown-linux -show-encoding -mcpu=mips64r2 | FileCheck %s
+# RUN: llvm-mc %s -triple=mips64el-unknown-linux -show-encoding -mcpu=mips64r2 | FileCheck %s
 # Check that the assembler can handle the documented syntax
 # for arithmetic and logical instructions.
-# CHECK: .section __TEXT,__text,regular,pure_instructions
 #------------------------------------------------------------------------------
 # Logical instructions
 #------------------------------------------------------------------------------
@@ -13,6 +12,7 @@
 # CHECK:  ins    $19, $9, 6, 7   # encoding: [0x84,0x61,0x33,0x7d]
 # CHECK:  nor    $9, $6, $7      # encoding: [0x27,0x48,0xc7,0x00]
 # CHECK:  or     $3, $3, $5      # encoding: [0x25,0x18,0x65,0x00]
+# CHECK:  ori    $4, $5, 17767   # encoding: [0x67,0x45,0xa4,0x34]
 # CHECK:  ori    $9, $6, 17767   # encoding: [0x67,0x45,0xc9,0x34]
 # CHECK:  rotr   $9, $6, 7       # encoding: [0xc2,0x49,0x26,0x00]
 # CHECK:  rotrv  $9, $6, $7      # encoding: [0x46,0x48,0xe6,0x00]
@@ -31,7 +31,7 @@
 # CHECK:  xori    $9, $6, 17767  # encoding: [0x67,0x45,0xc9,0x38]
 # CHECK:  xori   $9, $6, 17767   # encoding: [0x67,0x45,0xc9,0x38]
 # CHECK:  wsbh   $6, $7          # encoding: [0xa0,0x30,0x07,0x7c]
-# CHECK:  nor    $7, $8, $zero   # encoding: [0x27,0x38,0x00,0x01]
+# CHECK:  not    $7, $8          # encoding: [0x27,0x38,0x00,0x01]
      and    $9,  $6, $7
      and    $9,  $6, 17767
      andi   $9,  $6, 17767
@@ -40,6 +40,7 @@
      ins    $19, $9, 6,7
      nor    $9,  $6, $7
      or     $3,  $3, $5
+     or     $4,  $5, 17767
      ori    $9,  $6, 17767
      rotr   $9,  $6, 7
      rotrv  $9,  $6, $7
@@ -68,27 +69,35 @@
 # CHECK:  daddi   $9, $6, 17767   # encoding: [0x67,0x45,0xc9,0x60]
 # CHECK:  daddiu  $9, $6, -15001  # encoding: [0x67,0xc5,0xc9,0x64]
 # CHECK:  daddi   $9, $6, 17767   # encoding: [0x67,0x45,0xc9,0x60]
+# CHECK:  daddi   $9, $9, 17767   # encoding: [0x67,0x45,0x29,0x61]
 # CHECK:  daddiu  $9, $6, -15001  # encoding: [0x67,0xc5,0xc9,0x64]
+# CHECK:  daddiu  $9, $9, -15001  # encoding: [0x67,0xc5,0x29,0x65]
 # CHECK:  daddu   $9, $6, $7      # encoding: [0x2d,0x48,0xc7,0x00]
+# CHECK:  drotr   $9, $6, 20      # encoding: [0x3a,0x4d,0x26,0x00]
+# CHECK:  drotr32 $9, $6, 52      # encoding: [0x3e,0x4d,0x26,0x00]
 # CHECK:  madd   $6, $7          # encoding: [0x00,0x00,0xc7,0x70]
 # CHECK:  maddu  $6, $7          # encoding: [0x01,0x00,0xc7,0x70]
 # CHECK:  msub   $6, $7          # encoding: [0x04,0x00,0xc7,0x70]
 # CHECK:  msubu  $6, $7          # encoding: [0x05,0x00,0xc7,0x70]
 # CHECK:  mult   $3, $5          # encoding: [0x18,0x00,0x65,0x00]
 # CHECK:  multu  $3, $5          # encoding: [0x19,0x00,0x65,0x00]
-# CHECK:  dsubu   $4, $3, $5      # encoding: [0x2f,0x20,0x65,0x00]
-# CHECK:  daddu    $7, $8, $zero  # encoding: [0x2d,0x38,0x00,0x01]
-# CHECK:  .set    push                                            
-# CHECK:  .set    mips32r2                                        
-# CHECK:  rdhwr   $5, $29                                         
+# CHECK:  dsubu   $4, $3, $5     # encoding: [0x2f,0x20,0x65,0x00]
+# CHECK:  move    $7, $8         # encoding: [0x2d,0x38,0x00,0x01]
+# CHECK:  .set    push
+# CHECK:  .set    mips32r2
+# CHECK:  rdhwr   $5, $29
 # CHECK:  .set    pop            # encoding: [0x3b,0xe8,0x05,0x7c]
 
     dadd    $9,$6,$7
     dadd    $9,$6,17767
     daddu   $9,$6,-15001
     daddi   $9,$6,17767
+    daddi   $9,17767
     daddiu  $9,$6,-15001
+    daddiu  $9,-15001
     daddu   $9,$6,$7
+    drotr   $9, $6, 20
+    drotr32 $9, $6, 52
     madd   $6,$7
     maddu  $6,$7
     msub   $6,$7

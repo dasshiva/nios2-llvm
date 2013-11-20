@@ -14,10 +14,11 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/YAMLParser.h"
@@ -317,18 +318,20 @@ public:
   IO(void *Ctxt=NULL);
   virtual ~IO();
 
-  virtual bool outputting() = 0;
+  virtual bool outputting() const = 0;
 
   virtual unsigned beginSequence() = 0;
   virtual bool preflightElement(unsigned, void *&) = 0;
   virtual void postflightElement(void*) = 0;
   virtual void endSequence() = 0;
+  virtual bool canElideEmptySequence() = 0;
 
   virtual unsigned beginFlowSequence() = 0;
   virtual bool preflightFlowElement(unsigned, void *&) = 0;
   virtual void postflightFlowElement(void*) = 0;
   virtual void endFlowSequence() = 0;
 
+  virtual bool mapTag(StringRef Tag, bool Default=false) = 0;
   virtual void beginMapping() = 0;
   virtual void endMapping() = 0;
   virtual bool preflightKey(const char*, bool, bool, bool &, void *&) = 0;
@@ -388,7 +391,7 @@ public:
   typename llvm::enable_if_c<has_SequenceTraits<T>::value,void>::type
   mapOptional(const char* Key, T& Val) {
     // omit key/value instead of outputting empty sequence
-    if ( this->outputting() && !(Val.begin() != Val.end()) )
+    if ( this->canElideEmptySequence() && !(Val.begin() != Val.end()) )
       return;
     this->processKey(Key, Val, false);
   }
@@ -403,8 +406,7 @@ public:
   void mapOptional(const char* Key, T& Val, const T& Default) {
     this->processKeyWithDefault(Key, Val, Default, false);
   }
-
-
+  
 private:
   template <typename T>
   void processKeyWithDefault(const char *Key, T &Val, const T& DefaultValue,
@@ -693,8 +695,11 @@ public:
   // To set alternate error reporting.
   void setDiagHandler(llvm::SourceMgr::DiagHandlerTy Handler, void *Ctxt = 0);
 
+  static bool classof(const IO *io) { return !io->outputting(); }
+
 private:
-  virtual bool outputting();
+  virtual bool outputting() const;
+  virtual bool mapTag(StringRef, bool);
   virtual void beginMapping();
   virtual void endMapping();
   virtual bool preflightKey(const char *, bool, bool, bool &, void *&);
@@ -715,6 +720,7 @@ private:
   virtual void endBitSetScalar();
   virtual void scalarString(StringRef &);
   virtual void setError(const Twine &message);
+  virtual bool canElideEmptySequence();
 
   class HNode {
   public:
@@ -760,15 +766,7 @@ private:
     }
     static inline bool classof(const MapHNode *) { return true; }
 
-    struct StrMappingInfo {
-      static StringRef getEmptyKey() { return StringRef(); }
-      static StringRef getTombstoneKey() { return StringRef(" ", 0); }
-      static unsigned getHashValue(StringRef const val) {
-                                                return llvm::HashString(val); }
-      static bool isEqual(StringRef const lhs,
-                          StringRef const rhs) { return lhs.equals(rhs); }
-    };
-    typedef llvm::DenseMap<StringRef, HNode*, StrMappingInfo> NameToNode;
+    typedef llvm::StringMap<HNode*> NameToNode;
 
     bool isValidKey(StringRef key);
 
@@ -824,7 +822,10 @@ public:
   Output(llvm::raw_ostream &, void *Ctxt=NULL);
   virtual ~Output();
 
-  virtual bool outputting();
+  static bool classof(const IO *io) { return io->outputting(); }
+  
+  virtual bool outputting() const;
+  virtual bool mapTag(StringRef, bool);
   virtual void beginMapping();
   virtual void endMapping();
   virtual bool preflightKey(const char *key, bool, bool, bool &, void *&);
@@ -845,7 +846,7 @@ public:
   virtual void endBitSetScalar();
   virtual void scalarString(StringRef &);
   virtual void setError(const Twine &message);
-
+  virtual bool canElideEmptySequence();
 public:
   // These are only used by operator<<. They could be private
   // if that templated operator could be made a friend.

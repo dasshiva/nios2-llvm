@@ -12,7 +12,7 @@ target triple = "x86_64-apple-macosx10.9.0"
 ;CHECK: for.body.preheader:
 ;CHECK: br i1 %cmp.zero, label %middle.block, label %vector.memcheck
 ;CHECK: vector.memcheck:
-;CHECK: br i1 %found.conflict, label %middle.block, label %vector.ph
+;CHECK: br i1 %memcheck.conflict, label %middle.block, label %vector.ph
 ;CHECK: load <4 x float>
 define i32 @foo(float* nocapture %a, float* nocapture %b, i32 %n) nounwind uwtable ssp {
 entry:
@@ -22,10 +22,10 @@ entry:
 for.body:                                         ; preds = %entry, %for.body
   %indvars.iv = phi i64 [ %indvars.iv.next, %for.body ], [ 0, %entry ]
   %arrayidx = getelementptr inbounds float* %b, i64 %indvars.iv
-  %0 = load float* %arrayidx, align 4, !tbaa !0
+  %0 = load float* %arrayidx, align 4
   %mul = fmul float %0, 3.000000e+00
   %arrayidx2 = getelementptr inbounds float* %a, i64 %indvars.iv
-  store float %mul, float* %arrayidx2, align 4, !tbaa !0
+  store float %mul, float* %arrayidx2, align 4
   %indvars.iv.next = add i64 %indvars.iv, 1
   %lftr.wideiv = trunc i64 %indvars.iv.next to i32
   %exitcond = icmp eq i32 %lftr.wideiv, %n
@@ -35,6 +35,30 @@ for.end:                                          ; preds = %for.body, %entry
   ret i32 undef
 }
 
-!0 = metadata !{metadata !"float", metadata !1}
-!1 = metadata !{metadata !"omnipotent char", metadata !2}
-!2 = metadata !{metadata !"Simple C/C++ TBAA"}
+; Make sure that we try to vectorize loops with a runtime check if the
+; dependency check fails.
+
+; CHECK-LABEL: test_runtime_check
+; CHECK:      <4 x float>
+define void @test_runtime_check(float* %a, float %b, i64 %offset, i64 %offset2, i64 %n) {
+entry:
+  br label %for.body
+
+for.body:
+  %iv = phi i64 [ 0, %entry ], [ %iv.next, %for.body ]
+  %ind.sum = add i64 %iv, %offset
+  %arr.idx = getelementptr inbounds float* %a, i64 %ind.sum
+  %l1 = load float* %arr.idx, align 4
+  %ind.sum2 = add i64 %iv, %offset2
+  %arr.idx2 = getelementptr inbounds float* %a, i64 %ind.sum2
+  %l2 = load float* %arr.idx2, align 4
+  %m = fmul fast float %b, %l2
+  %ad = fadd fast float %l1, %m
+  store float %ad, float* %arr.idx, align 4
+  %iv.next = add nuw nsw i64 %iv, 1
+  %exitcond = icmp eq i64 %iv.next, %n
+  br i1 %exitcond, label %loopexit, label %for.body
+
+loopexit:
+  ret void
+}

@@ -77,6 +77,7 @@ public:
   /// \name Scalar TTI Implementations
   /// @{
   virtual PopcntSupportKind getPopcntSupport(unsigned TyWidth) const;
+  virtual void getUnrollingPreferences(Loop *L, UnrollingPreferences &UP) const;
 
   /// @}
 
@@ -86,7 +87,9 @@ public:
   virtual unsigned getNumberOfRegisters(bool Vector) const;
   virtual unsigned getRegisterBitWidth(bool Vector) const;
   virtual unsigned getMaximumUnrollFactor() const;
-  virtual unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty) const;
+  virtual unsigned getArithmeticInstrCost(unsigned Opcode, Type *Ty,
+                                          OperandValueKind,
+                                          OperandValueKind) const;
   virtual unsigned getShuffleCost(ShuffleKind Kind, Type *Tp,
                                   int Index, Type *SubTp) const;
   virtual unsigned getCastInstrCost(unsigned Opcode, Type *Dst,
@@ -122,10 +125,17 @@ llvm::createPPCTargetTransformInfoPass(const PPCTargetMachine *TM) {
 
 PPCTTI::PopcntSupportKind PPCTTI::getPopcntSupport(unsigned TyWidth) const {
   assert(isPowerOf2_32(TyWidth) && "Ty width must be power of 2");
-  // FIXME: PPC currently does not have custom popcnt lowering even though
-  // there is hardware support. Once this is fixed, update this function
-  // to reflect the real capabilities of the hardware.
+  if (ST->hasPOPCNTD() && TyWidth <= 64)
+    return PSK_FastHardware;
   return PSK_Software;
+}
+
+void PPCTTI::getUnrollingPreferences(Loop *L, UnrollingPreferences &UP) const {
+  if (ST->getDarwinDirective() == PPC::DIR_A2) {
+    // The A2 is in-order with a deep pipeline, and concatenation unrolling
+    // helps expose latency-hiding opportunities to the instruction scheduler.
+    UP.Partial = UP.Runtime = true;
+  }
 }
 
 unsigned PPCTTI::getNumberOfRegisters(bool Vector) const {
@@ -167,11 +177,14 @@ unsigned PPCTTI::getMaximumUnrollFactor() const {
   return 2;
 }
 
-unsigned PPCTTI::getArithmeticInstrCost(unsigned Opcode, Type *Ty) const {
+unsigned PPCTTI::getArithmeticInstrCost(unsigned Opcode, Type *Ty,
+                                        OperandValueKind Op1Info,
+                                        OperandValueKind Op2Info) const {
   assert(TLI->InstructionOpcodeToISD(Opcode) && "Invalid opcode");
 
   // Fallback to the default implementation.
-  return TargetTransformInfo::getArithmeticInstrCost(Opcode, Ty);
+  return TargetTransformInfo::getArithmeticInstrCost(Opcode, Ty, Op1Info,
+                                                     Op2Info);
 }
 
 unsigned PPCTTI::getShuffleCost(ShuffleKind Kind, Type *Tp, int Index,
@@ -193,6 +206,24 @@ unsigned PPCTTI::getCmpSelInstrCost(unsigned Opcode, Type *ValTy,
 unsigned PPCTTI::getVectorInstrCost(unsigned Opcode, Type *Val,
                                     unsigned Index) const {
   assert(Val->isVectorTy() && "This must be a vector type");
+
+  int ISD = TLI->InstructionOpcodeToISD(Opcode);
+  assert(ISD && "Invalid opcode");
+
+  // Estimated cost of a load-hit-store delay.  This was obtained
+  // experimentally as a minimum needed to prevent unprofitable
+  // vectorization for the paq8p benchmark.  It may need to be
+  // raised further if other unprofitable cases remain.
+  unsigned LHSPenalty = 12;
+
+  // Vector element insert/extract with Altivec is very expensive,
+  // because they require store and reload with the attendant
+  // processor stall for load-hit-store.  Until VSX is available,
+  // these need to be estimated as very costly.
+  if (ISD == ISD::EXTRACT_VECTOR_ELT ||
+      ISD == ISD::INSERT_VECTOR_ELT)
+    return LHSPenalty +
+      TargetTransformInfo::getVectorInstrCost(Opcode, Val, Index);
 
   return TargetTransformInfo::getVectorInstrCost(Opcode, Val, Index);
 }
