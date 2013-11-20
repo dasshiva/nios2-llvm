@@ -1942,3 +1942,84 @@ Nios2TargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
   return false;
 }
 
+MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
+    MachineInstr *MI, MachineBasicBlock *BB) const {
+  MachineFunction *MF = BB->getParent();
+  const TargetInstrInfo *TII = getTargetMachine().getInstrInfo();
+  MachineBasicBlock::iterator I = MachineBasicBlock::iterator(MI);
+
+  DEBUG(dbgs() << "Custom inserting " << *MI);
+
+  switch (MI->getOpcode()) {
+    case Nios2::SelNoCond: {
+      /*
+       * SelNoCond res, a, x, y
+       * ==>
+       * bneq a, ZERO, BB1
+       * br BB2
+       * BB1:
+       * resx = COPY x
+       * br ExitBB
+       * BB2:
+       * resy = COPY y
+       * br ExitBB
+       * ExitBB:
+       * res = PHI resx, resy
+       *
+       */
+      const DebugLoc DL = MI->getDebugLoc();
+      unsigned &res = MI->getOperand(0).getReg();
+      MachineOperand &a = MI->getOperand(1);
+      MachineOperand &x = MI->getOperand(2);
+      MachineOperand &y = MI->getOperand(3);
+      const TargetRegisterClass *RC = getRegClassFor(MVT::i32);
+      unsigned resx = MF->getRegInfo().createVirtualRegister(RC);
+      unsigned resy = MF->getRegInfo().createVirtualRegister(RC);
+      const BasicBlock *LLVM_BB = BB->getBasicBlock();
+      MachineBasicBlock *BB1 = MF->CreateMachineBasicBlock(LLVM_BB);
+      MachineBasicBlock *BB2 = MF->CreateMachineBasicBlock(LLVM_BB);
+      MachineBasicBlock *ExitBB = MF->CreateMachineBasicBlock(LLVM_BB);
+      // Add new BBs
+      MachineFunction::iterator FIt = llvm::next(MachineFunction::iterator(BB));
+      MF->insert(FIt, BB1);
+      MF->insert(FIt, BB2);
+      MF->insert(FIt, ExitBB);
+
+      BuildMI(*BB, I, DL, TII->get(Nios2::BEQ))
+        .addOperand(a).addReg(Nios2::ZERO).addMBB(BB1);
+      BuildMI(*BB, I, DL, TII->get(Nios2::BR))
+        .addMBB(BB2);
+      /* BB1:
+       * resx = COPY x
+       * br ExitBB
+       */
+      BuildMI(BB1, DL, TII->get(TargetOpcode::COPY))
+        .addReg(resx, RegState::Define).addOperand(x);
+      BuildMI(BB1, DL, TII->get(Nios2::BR))
+        .addMBB(ExitBB);
+      /* BB1:
+       * resy = COPY x
+       * br ExitBB
+       */
+      BuildMI(BB2, DL, TII->get(TargetOpcode::COPY))
+        .addReg(resy, RegState::Define).addOperand(y);
+      BuildMI(BB2, DL, TII->get(Nios2::BR))
+        .addMBB(ExitBB);
+
+      /* res = PHI resx, resy */
+      BuildMI(ExitBB, DL, TII->get(TargetOpcode::PHI), res)
+        .addReg(resx).addReg(resy);
+
+      ExitBB->splice(ExitBB->end(), BB, llvm::next(I), BB->end());
+      ExitBB->transferSuccessorsAndUpdatePHIs(BB);
+      MI->eraseFromParent();
+      return ExitBB;
+      break;
+    }
+    default:
+      llvm_unreachable("Unhandled custom insterted instruction!");
+  }
+
+  return NULL;
+}
+

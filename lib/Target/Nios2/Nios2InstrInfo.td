@@ -711,3 +711,9 @@ multiclass SetCmpPats<RegisterClass RC, PatFrag setop, PatFrag setopu,
 defm CMPGT : SetCmpPats<CPURegs, setgt, setugt, CMPLT, CMPLTu, CMPGEi, CMPGEui>;
 defm CMPLE : SetCmpPats<CPURegs, setle, setule, CMPGE, CMPGEu, CMPLTi, CMPLTui>;
 
+// Generic select instruction
+let usesCustomInserter = 1 in
+def SelNoCond   : Nios2Pseudo<(outs CPURegs:$res), (ins CPURegs:$a, CPURegs:$x, CPURegs:$y),
+                                  "!select $res, $a, $x, $y",
+                                  [(set CPURegs:$res, (select CPURegs:$a, CPURegs:$x, CPURegs:$y))]>;
+
