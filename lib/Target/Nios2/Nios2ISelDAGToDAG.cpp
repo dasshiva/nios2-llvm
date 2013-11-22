@@ -221,7 +221,7 @@ bool Nios2DAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
 /// GOT address into a register.
 SDNode *Nios2DAGToDAGISel::getGlobalBaseReg() {
   unsigned GlobalBaseReg = MF->getInfo<Nios2FunctionInfo>()->getGlobalBaseReg();
-  return CurDAG->getRegister(GlobalBaseReg, TLI.getPointerTy()).getNode();
+  return CurDAG->getRegister(GlobalBaseReg, getTargetLowering()->getPointerTy()).getNode();
 }
 
 /// ComplexPattern used on Nios2InstrInfo
@@ -298,7 +298,7 @@ SelectAddr(SDNode *Parent, SDValue Addr, SDValue &Base, SDValue &Offset) {
 /// expanded, promoted and normal instructions
 SDNode* Nios2DAGToDAGISel::Select(SDNode *Node) {
   unsigned Opcode = Node->getOpcode();
-  DebugLoc dl = Node->getDebugLoc();
+  SDLoc dl(Node);
 
   // Dump information about the Node being selected
   DEBUG(errs() << "Selecting: "; Node->dump(CurDAG); errs() << "\n");
@@ -340,7 +340,7 @@ SDNode* Nios2DAGToDAGISel::Select(SDNode *Node) {
     SDValue RHS = Node->getOperand(1);
 
     EVT VT = LHS.getValueType();
-    SDNode *Carry = CurDAG->getMachineNode(Nios2::CMPLTu, dl, VT, Ops, 2);
+    SDNode *Carry = CurDAG->getMachineNode(Nios2::CMPLTu, dl, VT, Ops);
     SDNode *AddCarry = CurDAG->getMachineNode(Nios2::ADD, dl, VT,
                                               SDValue(Carry,0), RHS);
 

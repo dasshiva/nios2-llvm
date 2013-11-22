@@ -18,7 +18,7 @@ using namespace llvm;
 
 void Nios2MCAsmInfo::anchor() { }
 
-Nios2MCAsmInfo::Nios2MCAsmInfo(const Target &T, StringRef TT) {
+Nios2MCAsmInfo::Nios2MCAsmInfo(StringRef TT) {
   Triple TheTriple(TT);
   if ((TheTriple.getArch() == Triple::mips) ||
       (TheTriple.getArch() == Triple::mips64))

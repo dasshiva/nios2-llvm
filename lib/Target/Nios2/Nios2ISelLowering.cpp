@@ -100,7 +100,6 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   //setOperationAction(ISD::SELECT,             MVT::i32,   Custom);
   //setOperationAction(ISD::BRCOND,             MVT::Other, Custom);
   //setOperationAction(ISD::VASTART,            MVT::Other, Custom);
-  setOperationAction(ISD::MEMBARRIER,         MVT::Other, Custom);
   setOperationAction(ISD::ATOMIC_FENCE,       MVT::Other, Custom);
 
   setOperationAction(ISD::SDIV, MVT::i32, Expand);
@@ -123,9 +122,6 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   setOperationAction(ISD::CTLZ_ZERO_UNDEF,   MVT::i32,   Expand);
   setOperationAction(ISD::ROTL,              MVT::i32,   Expand);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32,  Expand);
-
-  setOperationAction(ISD::EXCEPTIONADDR,     MVT::i32, Expand);
-  setOperationAction(ISD::EHSELECTION,       MVT::i32, Expand);
 
   setOperationAction(ISD::VAARG,             MVT::Other, Expand);
   setOperationAction(ISD::VACOPY,            MVT::Other, Expand);
@@ -151,7 +147,7 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   setExceptionPointerRegister(Nios2::EA);
   //setExceptionSelectorRegister(IsN64 ? Nios2::A1_64 : Nios2::A1);
 
-  maxStoresPerMemcpy = 16;
+  //maxStoresPerMemcpy = 16;
 }
 
 bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) const {
@@ -166,7 +162,7 @@ bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) cons
   }
 }
 
-EVT Nios2TargetLowering::getSetCCResultType(EVT VT) const {
+EVT Nios2TargetLowering::getSetCCResultType(LLVMContext &Context, EVT VT) const {
   return MVT::i32;
 }
 
@@ -342,7 +338,6 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
     //case ISD::FCOPYSIGN:          return LowerFCOPYSIGN(Op, DAG);
     //case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG);
     //case ISD::RETURNADDR:         return LowerRETURNADDR(Op, DAG);
-    case ISD::MEMBARRIER:         return LowerMEMBARRIER(Op, DAG);
     case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
   }
   return SDValue();
@@ -367,7 +362,7 @@ AddLiveIn(MachineFunction &MF, unsigned PReg, const TargetRegisterClass *RC)
 SDValue Nios2TargetLowering::LowerGlobalAddress(SDValue Op,
                                                SelectionDAG &DAG) const {
   // FIXME there isn't actually debug info here
-  DebugLoc dl = Op.getDebugLoc();
+  SDLoc dl(Op);
   const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
 
   SDVTList VTs = DAG.getVTList(MVT::i32);
@@ -527,7 +522,7 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const
   ConstantPoolSDNode *N = cast<ConstantPoolSDNode>(Op);
   const Constant *C = N->getConstVal();
   // FIXME there isn't actually debug info here
-  DebugLoc dl = Op.getDebugLoc();
+  SDLoc dl(Op);
 
   // gp_rel relocation
   // FIXME: we should reference the constant pool using small data sections,
@@ -613,22 +608,13 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const
 //  return DAG.getCopyFromReg(DAG.getEntryNode(), Op.getDebugLoc(), Reg, VT);
 //}
 //
-//// TODO: set SType according to the desired memory barrier behavior.
-SDValue
-Nios2TargetLowering::LowerMEMBARRIER(SDValue Op, SelectionDAG &DAG) const {
-//  unsigned SType = 0;
-  DebugLoc dl = Op.getDebugLoc();
-  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0));
-//  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
-//                     DAG.getConstant(SType, MVT::i32));
-}
 
 SDValue Nios2TargetLowering::LowerATOMIC_FENCE(SDValue Op,
                                               SelectionDAG &DAG) const {
   // FIXME: Need pseudo-fence for 'singlethread' fences
   // FIXME: Set SType for weaker fences where supported/appropriate.
 //  unsigned SType = 0;
-  DebugLoc dl = Op.getDebugLoc();
+  SDLoc dl(Op);
   return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0));
 //  return DAG.getNode(Nios2ISD::Sync, dl, MVT::Other, Op.getOperand(0),
 //                     DAG.getConstant(SType, MVT::i32));
@@ -979,7 +965,7 @@ static const uint16_t O32IntRegs[] = {
 
 // Write ByVal Arg to arg registers and stack.
 static void
-WriteByValArg(SDValue Chain, DebugLoc dl,
+WriteByValArg(SDValue Chain, SDLoc dl,
               SmallVector<std::pair<unsigned, SDValue>, 16> &RegsToPass,
               SmallVector<SDValue, 8> &MemOpChains, SDValue StackPtr,
               MachineFrameInfo *MFI, SelectionDAG &DAG, SDValue Arg,
@@ -1163,7 +1149,7 @@ SDValue
 Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                               SmallVectorImpl<SDValue> &InVals) const {
   SelectionDAG &DAG                     = CLI.DAG;
-  DebugLoc &dl                          = CLI.DL;
+  SDLoc &dl                             = CLI.DL;
   SmallVector<ISD::OutputArg, 32> &Outs = CLI.Outs;
   SmallVector<SDValue, 32> &OutVals     = CLI.OutVals;
   SmallVector<ISD::InputArg, 32> &Ins   = CLI.Ins;
@@ -1207,7 +1193,7 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // ByValChain is the output chain of the last Memcpy node created for copying
   // byval arguments to the stack.
   SDValue NextStackOffsetVal = DAG.getIntPtrConstant(NextStackOffset, true);
-  Chain = DAG.getCALLSEQ_START(Chain, NextStackOffsetVal);
+  Chain = DAG.getCALLSEQ_START(Chain, NextStackOffsetVal, dl);
 
   SDValue StackPtr = DAG.getCopyFromReg(Chain, dl, Nios2::SP, getPointerTy());
 
@@ -1378,7 +1364,7 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   // Create the CALLSEQ_END node.
   Chain = DAG.getCALLSEQ_END(Chain, NextStackOffsetVal,
-                             DAG.getIntPtrConstant(0, true), InFlag);
+                             DAG.getIntPtrConstant(0, true), InFlag, dl);
   InFlag = Chain.getValue(1);
 
   // Handle result values, copying them out of physregs into vregs that we
@@ -1393,7 +1379,7 @@ SDValue
 Nios2TargetLowering::LowerCallResult(SDValue Chain, SDValue InFlag,
                                     CallingConv::ID CallConv, bool isVarArg,
                                     const SmallVectorImpl<ISD::InputArg> &Ins,
-                                    DebugLoc dl, SelectionDAG &DAG,
+                                    SDLoc dl, SelectionDAG &DAG,
                                     SmallVectorImpl<SDValue> &InVals) const {
   // Assign locations to each value returned by this call.
   SmallVector<CCValAssign, 16> RVLocs;
@@ -1416,7 +1402,7 @@ Nios2TargetLowering::LowerCallResult(SDValue Chain, SDValue InFlag,
 //===----------------------------------------------------------------------===//
 //             Formal Arguments Calling Convention Implementation
 //===----------------------------------------------------------------------===//
-static void ReadByValArg(MachineFunction &MF, SDValue Chain, DebugLoc dl,
+static void ReadByValArg(MachineFunction &MF, SDValue Chain, SDLoc dl,
                          std::vector<SDValue> &OutChains,
                          SelectionDAG &DAG, unsigned NumWords, SDValue FIN,
                          const CCValAssign &VA, const ISD::ArgFlagsTy &Flags,
@@ -1487,7 +1473,7 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
                                          CallingConv::ID CallConv,
                                          bool isVarArg,
                                       const SmallVectorImpl<ISD::InputArg> &Ins,
-                                         DebugLoc dl, SelectionDAG &DAG,
+                                         SDLoc dl, SelectionDAG &DAG,
                                          SmallVectorImpl<SDValue> &InVals)
                                           const {
   MachineFunction &MF = DAG.getMachineFunction();
@@ -1652,7 +1638,7 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
                                 CallingConv::ID CallConv, bool isVarArg,
                                 const SmallVectorImpl<ISD::OutputArg> &Outs,
                                 const SmallVectorImpl<SDValue> &OutVals,
-                                DebugLoc dl, SelectionDAG &DAG) const {
+                                SDLoc dl, SelectionDAG &DAG) const {
 
   // CCValAssign - represent the assignment of
   // the return value to a location
@@ -1664,14 +1650,6 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
 
   // Analize return values.
   CCInfo.AnalyzeReturn(Outs, RetCC_Nios2);
-
-  // If this is the first return lowered for this function, add
-  // the regs to the liveout set for the function.
-  if (DAG.getMachineFunction().getRegInfo().liveout_empty()) {
-    for (unsigned i = 0; i != RVLocs.size(); ++i)
-      if (RVLocs[i].isRegLoc())
-        DAG.getMachineFunction().getRegInfo().addLiveOut(RVLocs[i].getLocReg());
-  }
 
   SDValue Flag;
 

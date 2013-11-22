@@ -18,12 +18,11 @@
 
 namespace llvm {
   class StringRef;
-  class Target;
 
   class Nios2MCAsmInfo : public MCAsmInfo {
     virtual void anchor();
   public:
-    explicit Nios2MCAsmInfo(const Target &T, StringRef TT);
+    explicit Nios2MCAsmInfo(StringRef TT);
   };
 
 } // namespace llvm

@@ -53,12 +53,12 @@ static MCSubtargetInfo *createNios2MCSubtargetInfo(StringRef TT, StringRef CPU,
   return X;
 }
 
-static MCAsmInfo *createNios2MCAsmInfo(const Target &T, StringRef TT) {
-  MCAsmInfo *MAI = new Nios2MCAsmInfo(T, TT);
+static MCAsmInfo *createNios2MCAsmInfo(const MCRegisterInfo &MRI, StringRef TT) {
+  MCAsmInfo *MAI = new Nios2MCAsmInfo(TT);
 
-  MachineLocation Dst(MachineLocation::VirtualFP);
-  MachineLocation Src(Nios2::SP, 0);
-  MAI->addInitialFrameState(0, Dst, Src);
+  unsigned SP = MRI.getDwarfRegNum(Nios2::SP, true);
+  MCCFIInstruction Inst = MCCFIInstruction::createDefCfa(0, SP, 0);
+  MAI->addInitialFrameState(Inst);
 
   return MAI;
 }

@@ -27,11 +27,37 @@
 
 using namespace llvm;
 
+static MCCFIInstruction convertMoveToCFI(const MCRegisterInfo &MRI,
+                                         MCSymbol *Label,
+                                         const MachineLocation &Dst,
+                                         const MachineLocation &Src) {
+  // If advancing cfa.
+  if (Dst.isReg() && Dst.getReg() == MachineLocation::VirtualFP) {
+    if (Src.getReg() == MachineLocation::VirtualFP)
+      return MCCFIInstruction::createDefCfaOffset(Label, Src.getOffset());
+    // Reg + Offset
+    return MCCFIInstruction::createDefCfa(
+        Label, MRI.getDwarfRegNum(Src.getReg(), true), -Src.getOffset());
+  }
+
+  if (Src.isReg() && Src.getReg() == MachineLocation::VirtualFP) {
+    assert(Dst.isReg() && "Machine move not supported yet.");
+    return MCCFIInstruction::createDefCfaRegister(
+        Label, MRI.getDwarfRegNum(Dst.getReg(), true));
+  }
+
+  assert(!Dst.isReg() && "Machine move not supported yet.");
+  return MCCFIInstruction::createOffset(
+      Label, MRI.getDwarfRegNum(Src.getReg(), true), Dst.getOffset());
+}
+
 void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
   MachineBasicBlock &MBB   = MF.front();
   MachineFrameInfo *MFI    = MF.getFrameInfo();
   const Nios2InstrInfo &TII =
     *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
+  const Nios2RegisterInfo &MRI =
+    *static_cast<const Nios2RegisterInfo*>(MF.getTarget().getRegisterInfo());
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
   unsigned SP = Nios2::SP;
@@ -46,7 +72,6 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
   if (StackSize == 0 && !MFI->adjustsStack()) return;
 
   MachineModuleInfo &MMI = MF.getMMI();
-  std::vector<MachineMove> &Moves = MMI.getFrameMoves();
   MachineLocation DstML, SrcML;
 
   // Adjust stack.
@@ -58,7 +83,7 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
           TII.get(TargetOpcode::PROLOG_LABEL)).addSym(AdjustSPLabel);
   DstML = MachineLocation(MachineLocation::VirtualFP);
   SrcML = MachineLocation(MachineLocation::VirtualFP, -StackSize);
-  Moves.push_back(MachineMove(AdjustSPLabel, DstML, SrcML));
+  MMI.addFrameInst(convertMoveToCFI(MRI, AdjustSPLabel, DstML, SrcML));
 
   const std::vector<CalleeSavedInfo> &CSI = MFI->getCalleeSavedInfo();
 
@@ -82,7 +107,7 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
       // Reg is in CPURegs
       DstML = MachineLocation(MachineLocation::VirtualFP, Offset);
       SrcML = MachineLocation(Reg);
-      Moves.push_back(MachineMove(CSLabel, DstML, SrcML));
+      MMI.addFrameInst(convertMoveToCFI(MRI, CSLabel, DstML, SrcML));
     }
   }
 
@@ -97,7 +122,7 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
             TII.get(TargetOpcode::PROLOG_LABEL)).addSym(SetFPLabel);
     DstML = MachineLocation(FP);
     SrcML = MachineLocation(MachineLocation::VirtualFP);
-    Moves.push_back(MachineMove(SetFPLabel, DstML, SrcML));
+    MMI.addFrameInst(convertMoveToCFI(MRI, SetFPLabel, DstML, SrcML));
   }
 }
 

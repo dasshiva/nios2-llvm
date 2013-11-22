@@ -71,7 +71,7 @@ MCOperand Nios2MCInstLower::LowerSymbolOperand(const MachineOperand &MO,
     break;
 
   case MachineOperand::MO_GlobalAddress:
-    Symbol = Mang->getSymbol(MO.getGlobal());
+    Symbol = AsmPrinter.getSymbol(MO.getGlobal());
     Offset += MO.getOffset();
     break;
 

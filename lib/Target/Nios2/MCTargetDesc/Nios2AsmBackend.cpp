@@ -253,7 +253,9 @@ public:
 } // namespace
 
 // MCAsmBackend
-MCAsmBackend *llvm::createNios2AsmBackend(const Target &T, StringRef TT,
+MCAsmBackend *llvm::createNios2AsmBackend(const Target &T,
+                                             const MCRegisterInfo &MRI,
+                                             StringRef TT,
                                              StringRef CPU) {
   return new Nios2AsmBackend(T, Triple(TT).getOS(),
                             /*IsLittle*/true, /*Is64Bit*/false);

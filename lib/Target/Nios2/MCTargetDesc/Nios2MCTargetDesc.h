@@ -35,8 +35,10 @@ MCCodeEmitter *createNios2MCCodeEmitter(const MCInstrInfo &MCII,
                                                const MCSubtargetInfo &STI,
                                                MCContext &Ctx);
 
-MCAsmBackend *createNios2AsmBackend(const Target &T, StringRef TT,
-                                           StringRef CPU);
+MCAsmBackend *createNios2AsmBackend(const Target &T, 
+                                    const MCRegisterInfo &MRI,
+                                    StringRef TT,
+                                    StringRef CPU);
 
 }
 
