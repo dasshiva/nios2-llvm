@@ -154,9 +154,6 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
  
   setOperationAction(ISD::TRAP, MVT::Other, Legal);
 
-  setTargetDAGCombine(ISD::SDIVREM);
-  setTargetDAGCombine(ISD::UDIVREM);
-
   MaxStoresPerMemcpy = 16;
 }
 
