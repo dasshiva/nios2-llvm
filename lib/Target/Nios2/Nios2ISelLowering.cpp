@@ -108,6 +108,8 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
   setOperationAction(ISD::ADDC, MVT::i32, Expand);
   setOperationAction(ISD::SUBC, MVT::i32, Expand);
+  setOperationAction(ISD::UMUL_LOHI,          MVT::i32,   Expand);
+  setOperationAction(ISD::SMUL_LOHI,          MVT::i32,   Expand);
   setOperationAction(ISD::SHL_PARTS,          MVT::i32,   Custom);
   setOperationAction(ISD::SRA_PARTS,          MVT::i32,   Custom);
   setOperationAction(ISD::SRL_PARTS,          MVT::i32,   Custom);
