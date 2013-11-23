@@ -1736,6 +1736,7 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
   CCInfo.AnalyzeReturn(Outs, RetCC_Nios2);
 
   SDValue Flag;
+  SmallVector<SDValue, 4> RetOps(1, Chain);
 
   // Copy the result values into the output registers.
   for (unsigned i = 0; i != RVLocs.size(); ++i) {
@@ -1747,6 +1748,7 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
     // guarantee that all emitted copies are
     // stuck together, avoiding something bad
     Flag = Chain.getValue(1);
+    RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
   // The mips ABIs for returning structs by value requires that we copy
@@ -1762,16 +1764,19 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
       llvm_unreachable("sret virtual register not created in the entry block");
     SDValue Val = DAG.getCopyFromReg(Chain, dl, Reg, getPointerTy());
 
-    Chain = DAG.getCopyToReg(Chain, dl, Nios2::R4, Val, Flag);
+    Chain = DAG.getCopyToReg(Chain, dl, Nios2::R2, Val, Flag);
     Flag = Chain.getValue(1);
+    RetOps.push_back(DAG.getRegister(Nios2::R2, getPointerTy()));
   }
+
+  RetOps[0] = Chain;
 
   // Return on Nios2 is always a "jr $ra"
   if (Flag.getNode())
-    return DAG.getNode(Nios2ISD::Ret, dl, MVT::Other, Chain, Flag);
+    RetOps.push_back(Flag);
 
   // Return Void
-  return DAG.getNode(Nios2ISD::Ret, dl, MVT::Other, Chain);
+  return DAG.getNode(Nios2ISD::Ret, dl, MVT::Other, &RetOps[0], RetOps.size());
 }
 
 //===----------------------------------------------------------------------===//

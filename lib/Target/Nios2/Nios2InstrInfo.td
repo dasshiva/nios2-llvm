@@ -65,7 +65,8 @@ def Nios2Lo    : SDNode<"Nios2ISD::Lo", SDTIntUnaryOp>;
 def Nios2GPRel : SDNode<"Nios2ISD::GPRel", SDTIntUnaryOp>;
 
 // Return
-def Nios2Ret : SDNode<"Nios2ISD::Ret", SDTNone, [SDNPHasChain, SDNPOptInGlue]>;
+def Nios2Ret : SDNode<"Nios2ISD::Ret", SDTNone,
+    [SDNPHasChain, SDNPOptInGlue,SDNPVariadic]>;
 
 // These are target-independent nodes, but have target-specific formats.
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_Nios2CallSeqStart,
@@ -379,8 +380,15 @@ class IndirectBranch<RegisterClass RC>: JumpFR<RC, [(brind RC:$rA)]> {
   let isIndirectBranch = 1;
 }
 
+let isTerminator=1, isBarrier=1, Defs=[PC] in
+class CallFR<RegisterClass RC>:
+  FR<0x3a, 0x5, 0, (outs), (ins RC:$rA), "ret", [], IIBranch> {
+  let rB = 0;
+  let rC = 0;
+}
+
 // Return instruction
-class RetBase<RegisterClass RC>: JumpFR<RC, []> {
+class RetBase<RegisterClass RC>: CallFR<RC> {
   let isReturn = 1;
   let isCodeGenOnly = 1;
   let hasCtrlDep = 1;
