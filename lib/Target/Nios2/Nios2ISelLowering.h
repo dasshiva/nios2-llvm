@@ -93,6 +93,10 @@ namespace llvm {
     //SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerMEMBARRIER(SDValue Op, SelectionDAG& DAG) const;
     SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG& DAG) const;
+    SDValue lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
+                                                 bool IsSRA) const;
+    SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
+
 
     virtual SDValue
       LowerFormalArguments(SDValue Chain,

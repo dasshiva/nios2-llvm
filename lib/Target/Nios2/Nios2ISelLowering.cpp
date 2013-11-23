@@ -102,14 +102,19 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   //setOperationAction(ISD::VASTART,            MVT::Other, Custom);
   setOperationAction(ISD::ATOMIC_FENCE,       MVT::Other, Custom);
 
-  setOperationAction(ISD::SDIV, MVT::i32, Expand);
   setOperationAction(ISD::SREM, MVT::i32, Expand);
-  setOperationAction(ISD::UDIV, MVT::i32, Expand);
   setOperationAction(ISD::UREM, MVT::i32, Expand);
+  setOperationAction(ISD::SDIVREM, MVT::i32, Expand);
+  setOperationAction(ISD::UDIVREM, MVT::i32, Expand);
+  setOperationAction(ISD::ADDC, MVT::i32, Expand);
+  setOperationAction(ISD::SUBC, MVT::i32, Expand);
+  setOperationAction(ISD::SHL_PARTS,          MVT::i32,   Custom);
+  setOperationAction(ISD::SRA_PARTS,          MVT::i32,   Custom);
+  setOperationAction(ISD::SRL_PARTS,          MVT::i32,   Custom);
 
   // Operations not directly supported by Nios2.
   setOperationAction(ISD::BR_JT,             MVT::Other, Expand);
-  setOperationAction(ISD::BR_CC,             MVT::Other, Expand);
+  setOperationAction(ISD::BR_CC,             MVT::i32,   Expand);
   setOperationAction(ISD::SELECT_CC,         MVT::Other, Expand);
   setOperationAction(ISD::UINT_TO_FP,        MVT::i32,   Expand);
   setOperationAction(ISD::FP_TO_UINT,        MVT::i32,   Expand);
@@ -145,9 +150,14 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   computeRegisterProperties();
 
   setExceptionPointerRegister(Nios2::EA);
-  //setExceptionSelectorRegister(IsN64 ? Nios2::A1_64 : Nios2::A1);
+  //setExceptionSelectorRegister(Nios2::R1);
+ 
+  setOperationAction(ISD::TRAP, MVT::Other, Legal);
 
-  //maxStoresPerMemcpy = 16;
+  setTargetDAGCombine(ISD::SDIVREM);
+  setTargetDAGCombine(ISD::UDIVREM);
+
+  MaxStoresPerMemcpy = 16;
 }
 
 bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) const {
@@ -320,6 +330,78 @@ EVT Nios2TargetLowering::getSetCCResultType(LLVMContext &Context, EVT VT) const 
 //  return DAG.getNode(ISD::ADD, DL, ValTy, Add1, Lo);
 //}
 
+SDValue Nios2TargetLowering::lowerShiftLeftParts(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  SDValue Lo = Op.getOperand(0), Hi = Op.getOperand(1);
+  SDValue Shamt = Op.getOperand(2);
+
+  // if shamt < 32:
+  //  lo = (shl lo, shamt)
+  //  hi = (or (shl hi, shamt) (srl (srl lo, 1), ~shamt))
+  // else:
+  //  lo = 0
+  //  hi = (shl lo, shamt[4:0])
+  SDValue Not = DAG.getNode(ISD::XOR, DL, MVT::i32, Shamt,
+                            DAG.getConstant(-1, MVT::i32));
+  SDValue ShiftRight1Lo = DAG.getNode(ISD::SRL, DL, MVT::i32, Lo,
+                                      DAG.getConstant(1, MVT::i32));
+  SDValue ShiftRightLo = DAG.getNode(ISD::SRL, DL, MVT::i32, ShiftRight1Lo,
+                                     Not);
+  SDValue ShiftLeftHi = DAG.getNode(ISD::SHL, DL, MVT::i32, Hi, Shamt);
+  SDValue Or = DAG.getNode(ISD::OR, DL, MVT::i32, ShiftLeftHi, ShiftRightLo);
+  SDValue ShiftLeftLo = DAG.getNode(ISD::SHL, DL, MVT::i32, Lo, Shamt);
+  SDValue Cond = DAG.getNode(ISD::AND, DL, MVT::i32, Shamt,
+                             DAG.getConstant(0x20, MVT::i32));
+  Lo = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond,
+                   DAG.getConstant(0, MVT::i32), ShiftLeftLo);
+  Hi = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond, ShiftLeftLo, Or);
+
+  SDValue Ops[2] = {Lo, Hi};
+  return DAG.getMergeValues(Ops, 2, DL);
+}
+
+SDValue Nios2TargetLowering::lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
+                                                 bool IsSRA) const {
+  SDLoc DL(Op);
+  SDValue Lo = Op.getOperand(0), Hi = Op.getOperand(1);
+  SDValue Shamt = Op.getOperand(2);
+
+  // if shamt < 32:
+  //  lo = (or (shl (shl hi, 1), ~shamt) (srl lo, shamt))
+  //  if isSRA:
+  //    hi = (sra hi, shamt)
+  //  else:
+  //    hi = (srl hi, shamt)
+  // else:
+  //  if isSRA:
+  //   lo = (sra hi, shamt[4:0])
+  //   hi = (sra hi, 31)
+  //  else:
+  //   lo = (srl hi, shamt[4:0])
+  //   hi = 0
+  SDValue Not = DAG.getNode(ISD::XOR, DL, MVT::i32, Shamt,
+                            DAG.getConstant(-1, MVT::i32));
+  SDValue ShiftLeft1Hi = DAG.getNode(ISD::SHL, DL, MVT::i32, Hi,
+                                     DAG.getConstant(1, MVT::i32));
+  SDValue ShiftLeftHi = DAG.getNode(ISD::SHL, DL, MVT::i32, ShiftLeft1Hi, Not);
+  SDValue ShiftRightLo = DAG.getNode(ISD::SRL, DL, MVT::i32, Lo, Shamt);
+  SDValue Or = DAG.getNode(ISD::OR, DL, MVT::i32, ShiftLeftHi, ShiftRightLo);
+  SDValue ShiftRightHi = DAG.getNode(IsSRA ? ISD::SRA : ISD::SRL, DL, MVT::i32,
+                                     Hi, Shamt);
+  SDValue Cond = DAG.getNode(ISD::AND, DL, MVT::i32, Shamt,
+                             DAG.getConstant(0x20, MVT::i32));
+  SDValue Shift31 = DAG.getNode(ISD::SRA, DL, MVT::i32, Hi,
+                                DAG.getConstant(31, MVT::i32));
+  Lo = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond, ShiftRightHi, Or);
+  Hi = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond,
+                   IsSRA ? Shift31 : DAG.getConstant(0, MVT::i32),
+                   ShiftRightHi);
+
+  SDValue Ops[2] = {Lo, Hi};
+  return DAG.getMergeValues(Ops, 2, DL);
+}
+
 SDValue Nios2TargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const
 {
@@ -328,6 +410,9 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
     //case ISD::BRCOND:             return LowerBRCOND(Op, DAG);
     case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
     case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
+    case ISD::SHL_PARTS:          return lowerShiftLeftParts(Op, DAG);
+    case ISD::SRA_PARTS:          return lowerShiftRightParts(Op, DAG, true);
+    case ISD::SRL_PARTS:          return lowerShiftRightParts(Op, DAG, false);
     //case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
     //case ISD::GlobalTLSAddress:   return LowerGlobalTLSAddress(Op, DAG);
     //case ISD::JumpTable:          return LowerJumpTable(Op, DAG);

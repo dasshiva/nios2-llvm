@@ -36,6 +36,7 @@ Nios2TargetMachine(const Target &T, StringRef TT,
     InstrInfo(new Nios2InstrInfo(*this)),
     FrameLowering(new Nios2FrameLowering(Subtarget)),
     TLInfo(*this), TSInfo(*this)  {
+  initAsmInfo();
 }
 
 void Nios2StdTargetMachine::anchor() { }
@@ -45,7 +46,8 @@ Nios2StdTargetMachine(const Target &T, StringRef TT,
                     StringRef CPU, StringRef FS, const TargetOptions &Options,
                     Reloc::Model RM, CodeModel::Model CM,
                     CodeGenOpt::Level OL)
-  : Nios2TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {}
+  : Nios2TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {
+}
 
 namespace {
 /// Nios2 Code Generator Pass Configuration Options.

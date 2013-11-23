@@ -30,6 +30,11 @@ public:
     : TargetFrameLowering(StackGrowsDown, 8, 0, 8), STI(sti) {}
 
   bool hasFP(const MachineFunction &MF) const;
+
+  virtual void eliminateCallFramePseudoInstr(MachineFunction &MF,
+                                     MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator I) const;
+
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.
   void emitPrologue(MachineFunction &MF) const;

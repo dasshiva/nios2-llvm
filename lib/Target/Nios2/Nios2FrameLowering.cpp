@@ -214,6 +214,26 @@ void Nios2FrameLowering::emitEpilogue(MachineFunction &MF,
 //
 //===----------------------------------------------------------------------===//
 
+// Eliminate ADJCALLSTACKDOWN, ADJCALLSTACKUP pseudo instructions
+void Nios2FrameLowering::
+eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I) const {
+  const Nios2InstrInfo &TII =
+    *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
+
+  if (!hasReservedCallFrame(MF)) {
+    int64_t Amount = I->getOperand(0).getImm();
+
+    if (I->getOpcode() == Nios2::ADJCALLSTACKDOWN)
+      Amount = -Amount;
+
+    unsigned SP = Nios2::SP;
+    TII.adjustStackPtr(SP, Amount, MBB, I);
+  }
+
+  MBB.erase(I);
+}
+
 // hasFP - Return true if the specified function should have a dedicated frame
 // pointer register.  This is true if the function has variable sized allocas or
 // if frame pointer elimination is disabled.

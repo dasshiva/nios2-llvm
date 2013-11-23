@@ -74,12 +74,6 @@ def callseq_end   : SDNode<"ISD::CALLSEQ_END", SDT_Nios2CallSeqEnd,
                            [SDNPHasChain, SDNPSideEffect,
                             SDNPOptInGlue, SDNPOutGlue]>;
 
-// DivRem(u) nodes
-def Nios2DivRem    : SDNode<"Nios2ISD::DivRem", SDT_Nios2DivRem,
-                           [SDNPOutGlue]>;
-def Nios2DivRemU   : SDNode<"Nios2ISD::DivRemU", SDT_Nios2DivRem,
-                           [SDNPOutGlue]>;
-
 // Target constant nodes that are not part of any isel patterns and remain
 // unchanged can cause instructions with illegal operands to be emitted.
 // Wrapper node patterns give the instruction selector a chance to replace
