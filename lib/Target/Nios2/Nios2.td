@@ -26,14 +26,20 @@ include "Nios2CallingConv.td"
 
 def Nios2InstrInfo : InstrInfo;
 
+def FeatureHWMul   : SubtargetFeature<"hw-mul","HasHWMul", "true",
+                                        "Enable hardware multiplier">;
+def FeatureHWDiv   : SubtargetFeature<"hw-div","HasHWDiv", "true",
+                                        "Enable hardware divider">;
+
 //===----------------------------------------------------------------------===//
 // Nios2 processors supported.
 //===----------------------------------------------------------------------===//
 
+
 class Proc<string Name, list<SubtargetFeature> Features = []>
  : Processor<Name, Nios2GenericItineraries, Features>;
 
-def : Proc<"nios2" >;
+def : Proc<"nios2", [FeatureHWMul, FeatureHWDiv]>;
 
 def Nios2AsmWriter : AsmWriter {
   string AsmWriterClassName  = "InstPrinter";

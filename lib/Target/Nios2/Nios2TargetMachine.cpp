@@ -31,7 +31,7 @@ Nios2TargetMachine(const Target &T, StringRef TT,
                   Reloc::Model RM, CodeModel::Model CM,
                   CodeGenOpt::Level OL)
   : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-    Subtarget(TT, CPU, FS, true, RM),
+    Subtarget(TT, CPU, FS, Options),
     Layout("e-p:32:32:32-i8:8:32-i16:16:32-n32"),
     InstrInfo(new Nios2InstrInfo(*this)),
     FrameLowering(new Nios2FrameLowering(Subtarget)),

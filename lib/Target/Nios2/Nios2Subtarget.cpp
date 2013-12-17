@@ -14,6 +14,9 @@
 #include "Nios2Subtarget.h"
 #include "Nios2.h"
 #include "Nios2RegisterInfo.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/TargetRegistry.h"
 
 #define GET_SUBTARGETINFO_TARGET_DESC
@@ -25,11 +28,18 @@ using namespace llvm;
 void Nios2Subtarget::anchor() { }
 
 Nios2Subtarget::Nios2Subtarget(const std::string &TT, const std::string &CPU,
-                             const std::string &FS, bool little,
-                             Reloc::Model RM) :
+                             const std::string &FS, const TargetOptions &Options) :
   Nios2GenSubtargetInfo(TT, CPU, FS),
-  Nios2ArchVersion(Nios2Std), Nios2ABI(UnknownABI), IsLittle(little)
+  Nios2ArchVersion(Nios2Std),
+  Nios2ABI(UnknownABI),
+  TargetTriple(TT),
+  Options(Options)
 {
+  initializeEnvironment();
+  resetSubtargetFeatures(CPU, FS);
+}
+
+void Nios2Subtarget::resetSubtargetFeatures(StringRef CPU, StringRef FS) {
   std::string CPUName = CPU;
   if (CPUName.empty())
     CPUName = "nios2";
@@ -45,11 +55,32 @@ Nios2Subtarget::Nios2Subtarget(const std::string &TT, const std::string &CPU,
     Nios2ABI = O32;
 
   // Is the target system Linux ?
-  if (TT.find("linux") == std::string::npos)
+  if (TargetTriple.getOS() != Triple::Linux)
     IsLinux = false;
 
   // Set UseSmallSection.
-  UseSmallSection = !IsLinux && (RM == Reloc::Static);
+  // UseSmallSection = !IsLinux && (RM == Reloc::Static);
+}
+
+void Nios2Subtarget::resetSubtargetFeatures(const MachineFunction *MF) {
+  AttributeSet FnAttrs = MF->getFunction()->getAttributes();
+  Attribute CPUAttr = FnAttrs.getAttribute(AttributeSet::FunctionIndex,
+                                           "target-cpu");
+  Attribute FSAttr = FnAttrs.getAttribute(AttributeSet::FunctionIndex,
+                                          "target-features");
+  std::string CPU =
+    !CPUAttr.hasAttribute(Attribute::None) ? CPUAttr.getValueAsString() : "";
+  std::string FS =
+    !FSAttr.hasAttribute(Attribute::None) ? FSAttr.getValueAsString() : "";
+  if (!FS.empty()) {
+    initializeEnvironment();
+    resetSubtargetFeatures(CPU, FS);
+  }
+}
+
+void Nios2Subtarget::initializeEnvironment() {
+  HasHWMul = false;
+  HasHWDiv = false;
 }
 
 bool
