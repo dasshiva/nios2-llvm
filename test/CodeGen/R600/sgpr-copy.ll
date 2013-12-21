@@ -268,3 +268,60 @@ endif:
 }
 
 !2 = metadata !{metadata !"const", null, i32 1}
+
+; CHECK-LABEL: @copy1
+; CHECK: BUFFER_LOAD_DWORD
+; CHECK: V_ADD
+; CHECK: S_ENDPGM
+define void @copy1(float addrspace(1)* %out, float addrspace(1)* %in0) {
+entry:
+  %0 = load float addrspace(1)* %in0
+  %1 = fcmp oeq float %0, 0.0
+  br i1 %1, label %if0, label %endif
+
+if0:
+  %2 = bitcast float %0 to i32
+  %3 = fcmp olt float %0, 0.0
+  br i1 %3, label %if1, label %endif
+
+if1:
+  %4 = add i32 %2, 1
+  br label %endif
+
+endif:
+  %5 = phi i32 [ 0, %entry ], [ %2, %if0 ], [ %4, %if1 ]
+  %6 = bitcast i32 %5 to float
+  store float %6, float addrspace(1)* %out
+  ret void
+}
+
+; This test is just checking that we don't crash / assertion fail.
+; CHECK-LABEL: @copy2
+; CHECK: S_ENDPGM
+
+define void @copy2([17 x <16 x i8>] addrspace(2)* byval, [32 x <16 x i8>] addrspace(2)* byval, [16 x <32 x i8>] addrspace(2)* byval, float inreg, i32 inreg, <2 x i32>, <2 x i32>, <2 x i32>, <3 x i32>, <2 x i32>, <2 x i32>, <2 x i32>, float, float, float, float, float, float, float, float, float) #0 {
+entry:
+  br label %LOOP68
+
+LOOP68:
+  %temp4.7 = phi float [ 0.000000e+00, %entry ], [ %v, %ENDIF69 ]
+  %t = phi i32 [ 20, %entry ], [ %x, %ENDIF69 ]
+  %g = icmp eq i32 0, %t
+  %l = bitcast float %temp4.7 to i32
+  br i1 %g, label %IF70, label %ENDIF69
+
+IF70:
+  %q = icmp ne i32 %l, 13
+  %temp.8 = select i1 %q, float 1.000000e+00, float 0.000000e+00
+  call void @llvm.SI.export(i32 15, i32 1, i32 1, i32 0, i32 0, float %temp.8, float 0.000000e+00, float 0.000000e+00, float 1.000000e+00)
+  ret void
+
+ENDIF69:
+  %u = add i32 %l, %t
+  %v = bitcast i32 %u to float
+  %x = add i32 %t, -1
+  br label %LOOP68
+}
+
+attributes #0 = { "ShaderType"="0" }
+
