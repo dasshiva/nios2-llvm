@@ -64,7 +64,7 @@ const char* Nios2::Nios2FCCToString(Nios2::CondCode CC) {
 }
 
 void Nios2InstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
-  OS << '$' << StringRef(getRegisterName(RegNo)).lower();
+  OS << StringRef(getRegisterName(RegNo)).lower();
 }
 
 void Nios2InstPrinter::printInst(const MCInst *MI, raw_ostream &O,

@@ -103,18 +103,18 @@ void Nios2AsmPrinter::EmitInstruction(const MachineInstr *MI) {
 void Nios2AsmPrinter::EmitFunctionBodyStart() {
   MCInstLowering.Initialize(Mang, &MF->getContext());
 
-  emitFrameDirective();
+  // emitFrameDirective();
 
-  if (OutStreamer.hasRawTextSupport()) {
-    SmallString<128> Str;
-    raw_svector_ostream OS(Str);
-    printSavedRegsBitmask(OS);
-    OutStreamer.EmitRawText(OS.str());
+  //if (OutStreamer.hasRawTextSupport()) {
+  //  SmallString<128> Str;
+  //  raw_svector_ostream OS(Str);
+  //  printSavedRegsBitmask(OS);
+  //  OutStreamer.EmitRawText(OS.str());
 
-    OutStreamer.EmitRawText(StringRef("\t.set\tnoreorder"));
-    OutStreamer.EmitRawText(StringRef("\t.set\tnomacro"));
-    OutStreamer.EmitRawText(StringRef("\t.set\tnoat"));
-  }
+  //  OutStreamer.EmitRawText(StringRef("\t.set\tnoreorder"));
+  //  OutStreamer.EmitRawText(StringRef("\t.set\tnomacro"));
+  //  OutStreamer.EmitRawText(StringRef("\t.set\tnoat"));
+  //}
 }
 
 //===----------------------------------------------------------------------===//
@@ -280,7 +280,7 @@ bool Nios2AsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
 
   const MachineOperand &MO = MI->getOperand(OpNum);
   assert(MO.isReg() && "unexpected inline asm memory operand");
-  O << "0($" << Nios2InstPrinter::getRegisterName(MO.getReg()) << ")";
+  O << "0(" << Nios2InstPrinter::getRegisterName(MO.getReg()) << ")";
 
   return false;
 }
@@ -312,8 +312,7 @@ void Nios2AsmPrinter::printOperand(const MachineInstr *MI, int opNum,
 
   switch (MO.getType()) {
     case MachineOperand::MO_Register:
-      O << '$'
-        << StringRef(Nios2InstPrinter::getRegisterName(MO.getReg())).lower();
+      O << StringRef(Nios2InstPrinter::getRegisterName(MO.getReg())).lower();
       break;
 
     case MachineOperand::MO_Immediate:
