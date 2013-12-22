@@ -21,7 +21,7 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/ADT/STLExtras.h"
 
-#define GET_INSTRINFO_CTOR
+#define GET_INSTRINFO_CTOR_DTOR
 #include "Nios2GenInstrInfo.inc"
 
 using namespace llvm;
