@@ -35,9 +35,21 @@
 <a name="welcome-to-github-pages" class="anchor" href="#welcome-to-github-pages"><span class="octicon octicon-link"></span></a>Welcome to GitHub Pages.</h3>
 
 <p>This project is intended to provide a full compiler tool-chain for the soft-core processor Nios II created by Altera</p>
+<p>At the moment, it relies on Altera's assembler and linker.</p>
 
 
 <h3> Building the compiler </h3>
+
+The compiler currently depends on Altera's assembler and linker.
+
+<h4> Install gcc toolchain by Altera</h4>
+
+Download the "Nios II Embedded Design Suite Legacy Tools" from
+<a href="https://www.altera.com/download/software/nios-ii">Altera's website</a>.
+
+
+
+<h4> Building LLVM compiler </h4>
 
 <p> The building process is quite simple. You will need to clone LLVM and its default c/c++ front-end clang:</p>
 
@@ -56,7 +68,7 @@ $ mkdir build
 
 <pre><code>
 $ cd build
-$ ../nios2-llvm/configure --enable-target=nios2 --target=nios2 --enable-optimized=yes
+$ ../nios2-llvm/configure --enable-targets=nios2 --target=nios2 --enable-optimized=yes
 $ make && make install
 </code></pre>
 
