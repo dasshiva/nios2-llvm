@@ -44,10 +44,28 @@ The compiler currently depends on Altera's assembler and linker.
 
 <h4> Install gcc toolchain by Altera</h4>
 
-Download the "Nios II Embedded Design Suite Legacy Tools" from
-<a href="https://www.altera.com/download/software/nios-ii">Altera's website</a>.
+The Nios II embedded design suite comes with gcc version 3.4.6
 
-
+<OL>
+  <LI> Download the <a href="https://www.altera.com/servlets/download3?swcode=WWW-SWD-NIO2-120-LNX&l=en">
+  "Nios II Embedded Design Suite Legacy Tools"</a>
+  coming from Altera's website.
+  <LI> Unpack it
+  <pre><code>
+$ tar xvf 12.0_178_legacy_nios2_linux.tar.gz
+  </code></pre>
+  <LI> Install gcc toolchain
+  <pre><code>
+$ sudo 12.0_178_legacy_nios2_linux/linux_installer/nios2eds/install
+  </code></pre>
+  By default, the package is installed in /opt/altera12.0
+  <LI> Now, you need to set up binary paths
+  <pre><code>
+$ export SOPC_KIT_NIOS2=/opt/altera12.0/nios2eds
+$ export GNU_TOOLS_NIOS2=$SOPC_KIT_NIOS2/bin/nios2-gnutools
+$ export PATH=$GNU_TOOLS_NIOS2/H-i686-pc-linux-gnu/bin:$PATH
+  </code></pre>
+</OL>
 
 <h4> Building LLVM compiler </h4>
 
