@@ -104,6 +104,7 @@ const char *Triple::getVendorTypeName(VendorType Kind) {
   case BGP: return "bgp";
   case BGQ: return "bgq";
   case Freescale: return "fsl";
+  case Altera: return "altera";
   case IBM: return "ibm";
   case NVIDIA: return "nvidia";
   }
