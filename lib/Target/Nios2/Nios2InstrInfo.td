@@ -57,6 +57,9 @@ def Nios2JmpLink : SDNode<"Nios2ISD::JmpLink",SDT_Nios2JmpLink,
                          [SDNPHasChain, SDNPOutGlue, SDNPOptInGlue,
                           SDNPVariadic]>;
 
+def Nios2ReadCtrl    : SDNode<"Nios2ISD::ReadCtrl", SDTIntUnaryOp>;
+def Nios2WriteCtrl    : SDNode<"Nios2ISD::WriteCtrl", SDTIntUnaryOp>;
+
 // Hi and Lo nodes are used to handle global addresses. Used on
 // Nios2ISelLowering to lower stuff like GlobalAddress, ExternalSymbol
 // static model. (nothing to do with Nios2 Registers Hi and Lo)
@@ -430,6 +433,27 @@ class Mult<bits<6> func, string instr_asm, InstrItinClass itin,
   let isCommutable = 1;
   let Defs = DefRegs;
   let neverHasSideEffects = 1;
+}
+
+// Access control registers
+class CtrlInst<dag outs, dag ins, list<dag> pattern, string asm_instr> :
+  FR<0x3a, 0x26, 0, outs, ins, asm_instr, pattern, NoItinerary> {
+  bits<5> rCtrl;
+  let shamt = rCtrl;
+}
+
+def rdctrl : CtrlInst<(outs CPURegs:$rC), (ins CtrlRegs:$rCtrl),
+    [(set CPURegs:$rC, (Nios2ReadCtrl CtrlRegs:$rCtrl))],
+    "rdctrl $rC, $rCtrl"> {
+  let rA = 0;
+  let rB = 0;
+}
+
+def wrctrl : CtrlInst<(outs CtrlRegs:$rCtrl), (ins CPURegs:$rA),
+    [(set CtrlRegs:$rCtrl, (Nios2WriteCtrl CPURegs:$rA))],
+    "wrctrl $rCtrl, $rA"> {
+  let rB = 0;
+  let rC = 0;
 }
 
 //===----------------------------------------------------------------------===//

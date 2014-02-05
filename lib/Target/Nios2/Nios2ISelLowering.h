@@ -42,7 +42,11 @@ namespace llvm {
 
       Wrapper,
 
-      Sync
+      Sync,
+
+      // Read and write control registers
+      ReadCtrl,
+      WriteCtrl
     };
   }
 
