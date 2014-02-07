@@ -124,6 +124,20 @@ namespace llvm {
 
     virtual MachineBasicBlock *EmitInstrWithCustomInserter(MachineInstr *MI,
                                   MachineBasicBlock *MBB) const;
+
+    virtual void LowerAsmOperandForConstraint(SDValue Op,
+        std::string &Constraint,
+        std::vector<SDValue>&Ops,
+        SelectionDAG &DAG) const;
+
+    virtual ConstraintType
+      getConstraintType(const std::string &Constraint) const;
+
+    virtual std::pair<unsigned, const TargetRegisterClass*>
+      getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const;
+
+    std::pair<unsigned, const TargetRegisterClass *>
+      parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const;
   };
 }
 

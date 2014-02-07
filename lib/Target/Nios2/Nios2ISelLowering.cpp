@@ -19,6 +19,7 @@
 #include "Nios2Subtarget.h"
 #include "InstPrinter/Nios2InstPrinter.h"
 #include "MCTargetDesc/Nios2BaseInfo.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -1785,34 +1786,36 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
 
 /// getConstraintType - Given a constraint letter, return the type of
 /// constraint it is for this target.
-//Nios2TargetLowering::ConstraintType Nios2TargetLowering::
-//getConstraintType(const std::string &Constraint) const
-//{
-//  // Nios2 specific constrainy
-//  // GCC config/mips/constraints.md
-//  //
-//  // 'd' : An address register. Equivalent to r
-//  //       unless generating NIOS216 code.
-//  // 'y' : Equivalent to r; retained for
-//  //       backwards compatibility.
-//  // 'c' : A register suitable for use in an indirect
-//  //       jump. This will always be $25 for -mabicalls.
-//  // 'l' : The lo register. 1 word storage.
-//  // 'x' : The hilo register pair. Double word storage.
-//  if (Constraint.size() == 1) {
-//    switch (Constraint[0]) {
-//      default : break;
-//      case 'd':
-//      case 'y':
-//      case 'f':
-//      case 'c':
-//      case 'l':
-//      case 'x':
-//        return C_RegisterClass;
-//    }
-//  }
-//  return TargetLowering::getConstraintType(Constraint);
-//}
+Nios2TargetLowering::ConstraintType Nios2TargetLowering::
+getConstraintType(const std::string &Constraint) const
+{
+  // Nios2 specific constraints
+  // GCC config/mips/constraints.md
+  //
+  // 'd' : An address register. Equivalent to r
+  //       unless generating MIPS16 code.
+  // 'y' : Equivalent to r; retained for
+  //       backwards compatibility.
+  // 'c' : A register suitable for use in an indirect
+  //       jump. This will always be $25 for -mabicalls.
+  // 'l' : The lo register. 1 word storage.
+  // 'x' : The hilo register pair. Double word storage.
+  if (Constraint.size() == 1) {
+    switch (Constraint[0]) {
+      default : break;
+      case 'd':
+      case 'y':
+      case 'f':
+      case 'c':
+      case 'l':
+      case 'x':
+        return C_RegisterClass;
+      case 'R':
+        return C_Memory;
+    }
+  }
+  return TargetLowering::getConstraintType(Constraint);
+}
 
 /// Examine constraint type and operand type and determine a weight value.
 /// This object must already have been set up with the operand type
@@ -1837,16 +1840,19 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
 //    if (type->isIntegerTy())
 //      weight = CW_Register;
 //    break;
-//  case 'f':
-//    if (type->isFloatTy())
+//  case 'f': // FPU or MSA register
+//    if (Subtarget->hasMSA() && type->isVectorTy() &&
+//        cast<VectorType>(type)->getBitWidth() == 128)
+//      weight = CW_Register;
+//    else if (type->isFloatTy())
 //      weight = CW_Register;
 //    break;
 //  case 'c': // $25 for indirect jumps
 //  case 'l': // lo register
 //  case 'x': // hilo register pair
-//      if (type->isIntegerTy())
+//    if (type->isIntegerTy())
 //      weight = CW_SpecificReg;
-//      break;
+//    break;
 //  case 'I': // signed 16 bit immediate
 //  case 'J': // integer zero
 //  case 'K': // unsigned 16 bit immediate
@@ -1857,153 +1863,224 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
 //    if (isa<ConstantInt>(CallOperandVal))
 //      weight = CW_Constant;
 //    break;
+//  case 'R':
+//    weight = CW_Memory;
+//    break;
 //  }
 //  return weight;
 //}
+
+/// This is a helper function to parse a physical register string and split it
+/// into non-numeric and numeric parts (Prefix and Reg). The first boolean flag
+/// that is returned indicates whether parsing was successful. The second flag
+/// is true if the numeric part exists.
+static std::pair<bool, bool>
+parsePhysicalReg(const StringRef &C, std::string &Prefix,
+                 unsigned long long &Reg) {
+  if (C.front() != '{' || C.back() != '}')
+    return std::make_pair(false, false);
+
+  // Search for the first numeric character.
+  StringRef::const_iterator I, B = C.begin() + 1, E = C.end() - 1;
+  I = std::find_if(B, E, std::ptr_fun(isdigit));
+
+  Prefix.assign(B, I - B);
+
+  // The second flag is set to false if no numeric characters were found.
+  if (I == E)
+    return std::make_pair(true, false);
+
+  // Parse the numeric characters.
+  return std::make_pair(!getAsUnsignedInteger(StringRef(I, E - I), 10, Reg),
+                        true);
+}
+
+std::pair<unsigned, const TargetRegisterClass *> Nios2TargetLowering::
+parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const {
+  std::string Prefix;
+  unsigned long long Reg;
+
+  std::pair<bool, bool> R = parsePhysicalReg(C, Prefix, Reg);
+
+  if (!R.first)
+    return std::make_pair((unsigned)0, (const TargetRegisterClass*)0);
+
+//  if ((Prefix == "hi" || Prefix == "lo")) { // Parse hi/lo.
+//    // No numeric characters follow "hi" or "lo".
+//    if (R.second)
+//      return std::make_pair((unsigned)0, (const TargetRegisterClass*)0);
 //
-///// Given a register class constraint, like 'r', if this corresponds directly
-///// to an LLVM register class, return a register of 0 and the register class
-///// pointer.
-//std::pair<unsigned, const TargetRegisterClass*> Nios2TargetLowering::
-//getRegForInlineAsmConstraint(const std::string &Constraint, EVT VT) const
-//{
-//  if (Constraint.size() == 1) {
-//    switch (Constraint[0]) {
-//    case 'd': // Address register. Same as 'r' unless generating NIOS216 code.
-//    case 'y': // Same as 'r'. Exists for compatibility.
-//    case 'r':
-//      if (VT == MVT::i32 || VT == MVT::i16 || VT == MVT::i8) {
-//        if (Subtarget->inNios216Mode())
-//          return std::make_pair(0U, &Nios2::CPU16RegsRegClass);
-//        return std::make_pair(0U, &Nios2::CPURegsRegClass);
-//      }
-//      if (VT == MVT::i64 && !HasNios264)
-//        return std::make_pair(0U, &Nios2::CPURegsRegClass);
-//      if (VT == MVT::i64 && HasNios264)
-//        return std::make_pair(0U, &Nios2::CPU64RegsRegClass);
-//      // This will generate an error message
-//      return std::make_pair(0u, static_cast<const TargetRegisterClass*>(0));
-//    case 'f':
-//      if (VT == MVT::f32)
-//        return std::make_pair(0U, &Nios2::FGR32RegClass);
-//      if ((VT == MVT::f64) && (!Subtarget->isSingleFloat())) {
-//        if (Subtarget->isFP64bit())
-//          return std::make_pair(0U, &Nios2::FGR64RegClass);
-//        return std::make_pair(0U, &Nios2::AFGR64RegClass);
-//      }
-//      break;
-//    case 'c': // register suitable for indirect jump
-//      if (VT == MVT::i32)
-//        return std::make_pair((unsigned)Nios2::T9, &Nios2::CPURegsRegClass);
-//      assert(VT == MVT::i64 && "Unexpected type.");
-//      return std::make_pair((unsigned)Nios2::T9_64, &Nios2::CPU64RegsRegClass);
-//    case 'l': // register suitable for indirect jump
-//      if (VT == MVT::i32)
-//        return std::make_pair((unsigned)Nios2::LO, &Nios2::HILORegClass);
-//      return std::make_pair((unsigned)Nios2::LO64, &Nios2::HILO64RegClass);
-//    case 'x': // register suitable for indirect jump
-//      // Fixme: Not triggering the use of both hi and low
-//      // This will generate an error message
-//      return std::make_pair(0u, static_cast<const TargetRegisterClass*>(0));
-//    }
+//    RC = TRI->getRegClass(Prefix == "hi" ?
+//                          Nios2::HI32RegClassID : Nios2::LO32RegClassID);
+//    return std::make_pair(*(RC->begin()), RC);
 //  }
-//  return TargetLowering::getRegForInlineAsmConstraint(Constraint, VT);
-//}
+
+  if (R.second) {
+    if (Prefix == "r")
+      return std::make_pair(Reg, &Nios2::CPURegsRegClass);
+    else if (Prefix == "ctl")
+      return std::make_pair(Reg, &Nios2::CtrlRegsRegClass);
+  } else {
+    Reg = StringSwitch<unsigned long long>(Prefix)
+      .Case("zero", Nios2::ZERO)
+      .Case("at", Nios2::AT)
+      .Case("et", Nios2::ET)
+      .Case("bt", Nios2::BT)
+      .Case("gp", Nios2::GP)
+      .Case("sp", Nios2::SP)
+      .Case("fp", Nios2::FP)
+      .Case("ea", Nios2::EA)
+      .Case("ba", Nios2::BA)
+      .Case("ra", Nios2::RA)
+      .Default(0);
+    if (Reg != 0)
+      return std::make_pair(Reg, &Nios2::CPURegsRegClass);
+
+    Reg = StringSwitch<unsigned long long>(Prefix)
+      .Case("status", Nios2::CTL0)
+      .Case("estatus", Nios2::CTL1)
+      .Case("bstatus", Nios2::CTL2)
+      .Case("ienable", Nios2::CTL3)
+      .Case("ipending", Nios2::CTL4)
+      .Case("cpuid", Nios2::CTL5)
+      .Case("exception", Nios2::CTL7)
+      .Case("pteaddr", Nios2::CTL8)
+      .Case("tlbacc", Nios2::CTL9)
+      .Case("tlbmisc", Nios2::CTL10)
+      .Case("badaddr", Nios2::CTL12)
+      .Case("config", Nios2::CTL13)
+      .Case("mpubase", Nios2::CTL14)
+      .Case("mpuacc", Nios2::CTL15)
+      .Default(0);
+    if (Reg != 0)
+      return std::make_pair(Reg, &Nios2::CtrlRegsRegClass);
+  }
+  return std::make_pair((unsigned)0, (const TargetRegisterClass*)0);
+}
+
+/// Given a register class constraint, like 'r', if this corresponds directly
+/// to an LLVM register class, return a register of 0 and the register class
+/// pointer.
+std::pair<unsigned, const TargetRegisterClass*> Nios2TargetLowering::
+getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const
+{
+  if (Constraint.size() == 1) {
+    switch (Constraint[0]) {
+    case 'd': // Address register. Same as 'r' unless generating MIPS16 code.
+    case 'y': // Same as 'r'. Exists for compatibility.
+    case 'r':
+      if (VT == MVT::i32 || VT == MVT::i16 || VT == MVT::i8) {
+        return std::make_pair(0U, &Nios2::CPURegsRegClass);
+      }
+      // This will generate an error message
+      return std::make_pair(0u, static_cast<const TargetRegisterClass*>(0));
+    }
+  }
+
+//  std::pair<unsigned, const TargetRegisterClass *> R;
+//  R = parseRegForInlineAsmConstraint(Constraint, VT);
 //
-///// LowerAsmOperandForConstraint - Lower the specified operand into the Ops
-///// vector.  If it is invalid, don't add anything to Ops.
-//void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
-//                                                     std::string &Constraint,
-//                                                     std::vector<SDValue>&Ops,
-//                                                     SelectionDAG &DAG) const {
-//  SDValue Result(0, 0);
+//  if (R.second)
+//    return R;
 //
-//  // Only support length 1 constraints for now.
-//  if (Constraint.length() > 1) return;
-//
-//  char ConstraintLetter = Constraint[0];
-//  switch (ConstraintLetter) {
-//  default: break; // This will fall through to the generic implementation
-//  case 'I': // Signed 16 bit constant
-//    // If this fails, the parent routine will give an error
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      int64_t Val = C->getSExtValue();
-//      if (isInt<16>(Val)) {
-//        Result = DAG.getTargetConstant(Val, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  case 'J': // integer zero
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      int64_t Val = C->getZExtValue();
-//      if (Val == 0) {
-//        Result = DAG.getTargetConstant(0, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  case 'K': // unsigned 16 bit immediate
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      uint64_t Val = (uint64_t)C->getZExtValue();
-//      if (isUInt<16>(Val)) {
-//        Result = DAG.getTargetConstant(Val, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  case 'L': // signed 32 bit immediate where lower 16 bits are 0
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      int64_t Val = C->getSExtValue();
-//      if ((isInt<32>(Val)) && ((Val & 0xffff) == 0)){
-//        Result = DAG.getTargetConstant(Val, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  case 'N': // immediate in the range of -65535 to -1 (inclusive)
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      int64_t Val = C->getSExtValue();
-//      if ((Val >= -65535) && (Val <= -1)) {
-//        Result = DAG.getTargetConstant(Val, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  case 'O': // signed 15 bit immediate
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      int64_t Val = C->getSExtValue();
-//      if ((isInt<15>(Val))) {
-//        Result = DAG.getTargetConstant(Val, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  case 'P': // immediate in the range of 1 to 65535 (inclusive)
-//    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-//      EVT Type = Op.getValueType();
-//      int64_t Val = C->getSExtValue();
-//      if ((Val <= 65535) && (Val >= 1)) {
-//        Result = DAG.getTargetConstant(Val, Type);
-//        break;
-//      }
-//    }
-//    return;
-//  }
-//
-//  if (Result.getNode()) {
-//    Ops.push_back(Result);
-//    return;
-//  }
-//
-//  TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
-//}
+  return TargetLowering::getRegForInlineAsmConstraint(Constraint, VT);
+}
+
+/// LowerAsmOperandForConstraint - Lower the specified operand into the Ops
+/// vector.  If it is invalid, don't add anything to Ops.
+void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
+                                                     std::string &Constraint,
+                                                     std::vector<SDValue>&Ops,
+                                                     SelectionDAG &DAG) const {
+  SDValue Result(0, 0);
+
+  // Only support length 1 constraints for now.
+  if (Constraint.length() > 1) return;
+
+  char ConstraintLetter = Constraint[0];
+  switch (ConstraintLetter) {
+  default: break; // This will fall through to the generic implementation
+  case 'I': // Signed 16 bit constant
+    // If this fails, the parent routine will give an error
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      int64_t Val = C->getSExtValue();
+      if (isInt<16>(Val)) {
+        Result = DAG.getTargetConstant(Val, Type);
+        break;
+      }
+    }
+    return;
+  case 'J': // integer zero
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      int64_t Val = C->getZExtValue();
+      if (Val == 0) {
+        Result = DAG.getTargetConstant(0, Type);
+        break;
+      }
+    }
+    return;
+  case 'K': // unsigned 16 bit immediate
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      uint64_t Val = (uint64_t)C->getZExtValue();
+      if (isUInt<16>(Val)) {
+        Result = DAG.getTargetConstant(Val, Type);
+        break;
+      }
+    }
+    return;
+  case 'L': // signed 32 bit immediate where lower 16 bits are 0
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      int64_t Val = C->getSExtValue();
+      if ((isInt<32>(Val)) && ((Val & 0xffff) == 0)){
+        Result = DAG.getTargetConstant(Val, Type);
+        break;
+      }
+    }
+    return;
+  case 'N': // immediate in the range of -65535 to -1 (inclusive)
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      int64_t Val = C->getSExtValue();
+      if ((Val >= -65535) && (Val <= -1)) {
+        Result = DAG.getTargetConstant(Val, Type);
+        break;
+      }
+    }
+    return;
+  case 'O': // signed 15 bit immediate
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      int64_t Val = C->getSExtValue();
+      if ((isInt<15>(Val))) {
+        Result = DAG.getTargetConstant(Val, Type);
+        break;
+      }
+    }
+    return;
+  case 'P': // immediate in the range of 1 to 65535 (inclusive)
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+      EVT Type = Op.getValueType();
+      int64_t Val = C->getSExtValue();
+      if ((Val <= 65535) && (Val >= 1)) {
+        Result = DAG.getTargetConstant(Val, Type);
+        break;
+      }
+    }
+    return;
+  }
+
+  if (Result.getNode()) {
+    Ops.push_back(Result);
+    return;
+  }
+
+  TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
+}
+
 
 bool
 Nios2TargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
