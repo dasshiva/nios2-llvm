@@ -577,6 +577,10 @@ def DIVU      : ArithLogicR<0x3a, 0x24, "divu", udiv, IIIdiv, CPURegs>;
 /// No operation
 def NOP   : Nios2Pseudo<(outs), (ins), "nop", []>;
 
+/// Pseudo instruction that match copy to reg from frameindexes
+def MOVFI : Nios2Pseudo<(outs CPURegs:$rA), (ins mem:$addr), "movfi",
+    [(set CPURegs:$rA, addr:$addr)]>;
+
 //===----------------------------------------------------------------------===//
 // Instruction aliases
 //===----------------------------------------------------------------------===//

@@ -37,6 +37,8 @@ Nios2TargetMachine(const Target &T, StringRef TT,
     FrameLowering(new Nios2FrameLowering(Subtarget)),
     TLInfo(*this), TSInfo(*this)  {
   initAsmInfo();
+  // Don't emit cfi directives, nios2-gcc doesn't support them
+  MCUseCFI = false;
 }
 
 void Nios2StdTargetMachine::anchor() { }
