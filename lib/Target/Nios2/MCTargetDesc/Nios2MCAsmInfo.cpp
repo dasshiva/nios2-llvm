@@ -19,24 +19,24 @@ using namespace llvm;
 void Nios2MCAsmInfo::anchor() { }
 
 Nios2MCAsmInfo::Nios2MCAsmInfo(StringRef TT) {
-  Triple TheTriple(TT);
-  if ((TheTriple.getArch() == Triple::mips) ||
-      (TheTriple.getArch() == Triple::mips64))
-    IsLittleEndian = false;
+  IsLittleEndian = false;
 
   AlignmentIsInBytes          = false;
   Data16bitsDirective         = "\t.2byte\t";
   Data32bitsDirective         = "\t.4byte\t";
   Data64bitsDirective         = "\t.8byte\t";
-  PrivateGlobalPrefix         = "$";
+  PrivateGlobalPrefix         = ".";
   CommentString               = "#";
   ZeroDirective               = "\t.space\t";
   GPRel32Directive            = "\t.gpword\t";
   GPRel64Directive            = "\t.gpdword\t";
   WeakRefDirective            = "\t.weak\t";
+  //GlobalPrefix                = "\t.global\t";
+  GlobalDirective                = "\t.global\t";
+  AscizDirective              = "\t.string\t";
+  HasIdentDirective           = true;
 
   SupportsDebugInformation = true;
   ExceptionsType = ExceptionHandling::DwarfCFI;
   HasLEB128 = true;
-  DwarfRegNumForCFI = true;
 }
