@@ -38,7 +38,8 @@ Nios2TargetMachine(const Target &T, StringRef TT,
     TLInfo(*this), TSInfo(*this)  {
   initAsmInfo();
   // Don't emit cfi directives, nios2-gcc doesn't support them
-  MCUseCFI = false;
+  setMCUseLoc(false);
+  setMCUseCFI(false);
 }
 
 void Nios2StdTargetMachine::anchor() { }
