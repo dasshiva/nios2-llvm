@@ -64,7 +64,8 @@ const char *Nios2TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case Nios2ISD::Ret:               return "Nios2ISD::Ret";
   case Nios2ISD::Wrapper:           return "Nios2ISD::Wrapper";
   case Nios2ISD::JmpLink:           return "Nios2ISD::JmpLink";
-  default:                         return NULL;
+  case Nios2ISD::Select:            return "Nios2ISD::Select";
+  default:                          return NULL;
   }
 }
 
@@ -118,7 +119,7 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   // Operations not directly supported by Nios2.
   setOperationAction(ISD::BR_JT,             MVT::Other, Expand);
   setOperationAction(ISD::BR_CC,             MVT::i32,   Expand);
-  setOperationAction(ISD::SELECT_CC,         MVT::Other, Expand);
+  setOperationAction(ISD::SELECT_CC,         MVT::i32, Custom);
   setOperationAction(ISD::UINT_TO_FP,        MVT::i32,   Expand);
   setOperationAction(ISD::FP_TO_UINT,        MVT::i32,   Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,    Expand);
@@ -402,6 +403,18 @@ SDValue Nios2TargetLowering::lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
   return DAG.getMergeValues(Ops, 2, DL);
 }
 
+SDValue Nios2TargetLowering::lowerSELECT_CC(SDValue Op,
+    SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  SDValue Cond = DAG.getNode(ISD::SETCC, DL,
+                             MVT::i32,
+                             Op.getOperand(0), Op.getOperand(1),
+                             Op.getOperand(4));
+  // Wrap select nodes
+  return DAG.getNode(Nios2ISD::Select, DL, Op.getValueType(), Cond, Op.getOperand(2),
+                     Op.getOperand(3));
+}
+
 SDValue Nios2TargetLowering::
 LowerOperation(SDValue Op, SelectionDAG &DAG) const
 {
@@ -417,7 +430,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
     //case ISD::GlobalTLSAddress:   return LowerGlobalTLSAddress(Op, DAG);
     //case ISD::JumpTable:          return LowerJumpTable(Op, DAG);
     //case ISD::SELECT:             return LowerSELECT(Op, DAG);
-    //case ISD::SELECT_CC:          return LowerSELECT_CC(Op, DAG);
+    case ISD::SELECT_CC:          return lowerSELECT_CC(Op, DAG);
     //case ISD::SETCC:              return LowerSETCC(Op, DAG);
     //case ISD::VASTART:            return LowerVASTART(Op, DAG);
     //case ISD::FCOPYSIGN:          return LowerFCOPYSIGN(Op, DAG);
@@ -2097,9 +2110,9 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
   DEBUG(dbgs() << "Custom inserting " << *MI);
 
   switch (MI->getOpcode()) {
-    case Nios2::SelNoCond: {
+    case Nios2::SELECT: {
       /*
-       * SelNoCond res, a, x, y
+       * SELECT res, a, x, y
        * ==>
        * bneq a, ZERO, BB1
        * br BB2
@@ -2158,6 +2171,10 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
 
       ExitBB->splice(ExitBB->end(), BB, llvm::next(I), BB->end());
       ExitBB->transferSuccessorsAndUpdatePHIs(BB);
+      BB->addSuccessor(BB1);
+      BB->addSuccessor(BB2);
+      BB1->addSuccessor(ExitBB);
+      BB2->addSuccessor(ExitBB);
       MI->eraseFromParent();
       return ExitBB;
       break;

@@ -71,6 +71,9 @@ def Nios2GPRel : SDNode<"Nios2ISD::GPRel", SDTIntUnaryOp>;
 def Nios2Ret : SDNode<"Nios2ISD::Ret", SDTNone,
     [SDNPHasChain, SDNPOptInGlue,SDNPVariadic]>;
 
+// Select
+def Nios2Select : SDNode<"Nios2ISD::Select", SDTSelect>;
+
 // These are target-independent nodes, but have target-specific formats.
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_Nios2CallSeqStart,
                            [SDNPHasChain, SDNPSideEffect, SDNPOutGlue]>;
@@ -743,7 +746,7 @@ defm CMPLE : SetCmpPats<CPURegs, setle, setule, CMPGE, CMPGEu, CMPLTi, CMPLTui>;
 
 // Generic select instruction
 let usesCustomInserter = 1 in
-def SelNoCond   : Nios2Pseudo<(outs CPURegs:$res), (ins CPURegs:$a, CPURegs:$x, CPURegs:$y),
+def SELECT   : Nios2Pseudo<(outs CPURegs:$res), (ins CPURegs:$a, CPURegs:$x, CPURegs:$y),
                                   "!select $res, $a, $x, $y",
-                                  [(set CPURegs:$res, (select CPURegs:$a, CPURegs:$x, CPURegs:$y))]>;
+                                  [(set CPURegs:$res, (Nios2Select CPURegs:$a, CPURegs:$x, CPURegs:$y))]>;
 

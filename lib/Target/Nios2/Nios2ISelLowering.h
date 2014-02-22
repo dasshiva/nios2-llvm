@@ -36,6 +36,9 @@ namespace llvm {
       // Return
       Ret,
 
+      // Select node: ins condition, true value, false value
+      Select, 
+
       GPRel,
 
       JmpLink,
@@ -90,7 +93,6 @@ namespace llvm {
     //SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerSELECT(SDValue Op, SelectionDAG &DAG) const;
-    //SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const;
@@ -100,7 +102,7 @@ namespace llvm {
     SDValue lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
                                                  bool IsSRA) const;
     SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
-
+    SDValue lowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
 
     virtual SDValue
       LowerFormalArguments(SDValue Chain,

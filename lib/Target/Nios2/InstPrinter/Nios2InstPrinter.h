@@ -94,6 +94,7 @@ private:
   void printMemOperand(const MCInst *MI, int opNum, raw_ostream &O);
   void printMemOperandEA(const MCInst *MI, int opNum, raw_ostream &O);
   void printFCCOperand(const MCInst *MI, int opNum, raw_ostream &O);
+ // void printBranchTarget(const MCInst *MI, int opNum, raw_ostream &O);
 };
 } // end namespace llvm
 
