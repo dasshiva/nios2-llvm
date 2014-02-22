@@ -2110,6 +2110,17 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
   DEBUG(dbgs() << "Custom inserting " << *MI);
 
   switch (MI->getOpcode()) {
+    case Nios2::MOVFI: {
+      const DebugLoc DL = MI->getDebugLoc();
+      // Expand to dst = src + imm
+      MachineOperand &dst = MI->getOperand(0);
+      MachineOperand &src = MI->getOperand(1);
+      MachineOperand &imm = MI->getOperand(2);
+      BuildMI(*BB, I, DL, TII->get(Nios2::ADDi))
+        .addOperand(dst).addOperand(src).addOperand(imm);
+      MI->eraseFromParent();
+      return BB;
+    }
     case Nios2::SELECT: {
       /*
        * SELECT res, a, x, y
@@ -2177,7 +2188,6 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
       BB2->addSuccessor(ExitBB);
       MI->eraseFromParent();
       return ExitBB;
-      break;
     }
     default:
       llvm_unreachable("Unhandled custom insterted instruction!");
