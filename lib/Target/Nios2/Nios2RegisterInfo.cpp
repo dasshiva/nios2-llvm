@@ -66,7 +66,11 @@ BitVector Nios2RegisterInfo::
 getReservedRegs(const MachineFunction &MF) const {
   static const uint16_t ReservedCPURegs[] = {
     Nios2::ZERO, Nios2::AT, Nios2::ET, Nios2::BT, Nios2::GP,
-    Nios2::SP, Nios2::EA, Nios2::BA, Nios2::RA
+    Nios2::SP, Nios2::EA, Nios2::BA, Nios2::RA,
+    Nios2::CTL0, Nios2::CTL1, Nios2::CTL2, Nios2::CTL3,
+    Nios2::CTL4, Nios2::CTL5, Nios2::CTL7,
+    Nios2::CTL8, Nios2::CTL9, Nios2::CTL10,
+    Nios2::CTL12, Nios2::CTL13, Nios2::CTL14, Nios2::CTL15,
   };
 
   BitVector Reserved(getNumRegs());
