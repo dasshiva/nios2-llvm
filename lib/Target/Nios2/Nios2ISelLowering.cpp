@@ -1932,7 +1932,7 @@ parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const {
     if (Prefix == "r")
       return std::make_pair(Reg, &Nios2::CPURegsRegClass);
     else if (Prefix == "ctl")
-      return std::make_pair(Reg, &Nios2::CtrlRegsRegClass);
+      return std::make_pair(Reg, &Nios2::CtlRegsRegClass);
   } else {
     Reg = StringSwitch<unsigned long long>(Prefix)
       .Case("zero", Nios2::ZERO)
@@ -1966,7 +1966,7 @@ parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const {
       .Case("mpuacc", Nios2::CTL15)
       .Default(0);
     if (Reg != 0)
-      return std::make_pair(Reg, &Nios2::CtrlRegsRegClass);
+      return std::make_pair(Reg, &Nios2::CtlRegsRegClass);
   }
   return std::make_pair((unsigned)0, (const TargetRegisterClass*)0);
 }

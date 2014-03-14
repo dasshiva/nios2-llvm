@@ -76,7 +76,8 @@ def CPURegs : RegisterClass<"Nios2", [i32], 32, (add
   // Reserved
   ET, BT, GP, SP, FP, EA, BA, RA, PC)>;
 
-def CtrlRegs : RegisterClass<"Nios2", [i32], 32,
+let isAllocatable = 0 in
+def CtlRegs : RegisterClass<"Nios2", [i32], 32,
     (add (sequence "CTL%u", 0, 5),
          (sequence "CTL%u", 7, 10),
          (sequence "CTL%u", 12, 15))>;

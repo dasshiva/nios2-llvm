@@ -57,9 +57,6 @@ def Nios2JmpLink : SDNode<"Nios2ISD::JmpLink",SDT_Nios2JmpLink,
                          [SDNPHasChain, SDNPOutGlue, SDNPOptInGlue,
                           SDNPVariadic]>;
 
-def Nios2ReadCtrl    : SDNode<"Nios2ISD::ReadCtrl", SDTIntUnaryOp>;
-def Nios2WriteCtrl    : SDNode<"Nios2ISD::WriteCtrl", SDTIntUnaryOp>;
-
 // Hi and Lo nodes are used to handle global addresses. Used on
 // Nios2ISelLowering to lower stuff like GlobalAddress, ExternalSymbol
 // static model. (nothing to do with Nios2 Registers Hi and Lo)
@@ -173,6 +170,11 @@ def NEG16 : SDNodeXForm<imm, [{
 // Transformation Function - get the immediate + 1
 def IMMPLUS1 : SDNodeXForm<imm, [{
   return getImm(N, N->getSExtValue()+1);
+}]>;
+
+// Map immediates to control registers
+def ICTLREG : SDNodeXForm<imm, [{
+  return getRegister(Nios2::CTL0 + N->getZExtValue(), MVT::i32);
 }]>;
 
 // Node immediate fits as 16-bit sign extended on target immediate.
@@ -439,25 +441,29 @@ class Mult<bits<6> func, string instr_asm, InstrItinClass itin,
 }
 
 // Access control registers
-class CtrlInst<dag outs, dag ins, list<dag> pattern, string asm_instr> :
+class CtlInst<dag outs, dag ins, list<dag> pattern, string asm_instr> :
   FR<0x3a, 0x26, 0, outs, ins, asm_instr, pattern, NoItinerary> {
-  bits<5> rCtrl;
-  let shamt = rCtrl;
+  bits<5> rCtl;
+  let shamt = rCtl;
 }
 
-def rdctrl : CtrlInst<(outs CPURegs:$rC), (ins CtrlRegs:$rCtrl),
-    [(set CPURegs:$rC, (Nios2ReadCtrl CtrlRegs:$rCtrl))],
-    "rdctrl $rC, $rCtrl"> {
+def RDCTL : CtlInst<(outs CPURegs:$rC), (ins CtlRegs:$rCtl), [],
+    "rdctl $rC, $rCtl"> {
   let rA = 0;
   let rB = 0;
 }
 
-def wrctrl : CtrlInst<(outs CtrlRegs:$rCtrl), (ins CPURegs:$rA),
-    [(set CtrlRegs:$rCtrl, (Nios2WriteCtrl CPURegs:$rA))],
-    "wrctrl $rCtrl, $rA"> {
+let hasSideEffects = 1 in
+def WRCTL : CtlInst<(outs), (ins CtlRegs:$rCtl, CPURegs:$rA), [],
+    "wrctl $rCtl, $rA"> {
   let rB = 0;
   let rC = 0;
 }
+
+def : Pat<(int_nios2_rdctl imm:$rCtl),
+    (RDCTL (ICTLREG imm:$rCtl))>;
+def : Pat<(int_nios2_wrctl imm:$rCtl, CPURegs:$rA),
+    (WRCTL (ICTLREG imm:$rCtl), CPURegs:$rA)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo instructions

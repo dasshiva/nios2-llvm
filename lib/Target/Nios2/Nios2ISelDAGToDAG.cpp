@@ -94,6 +94,10 @@ private:
   inline SDValue getImm(const SDNode *Node, unsigned Imm) {
     return CurDAG->getTargetConstant(Imm, Node->getValueType(0));
   }
+  // getRegister - Return the register number
+  inline SDValue getRegister(unsigned reg, MVT type) {
+    return CurDAG->getRegister(reg, type);
+  }
 
   void ProcessFunctionAfterISel(MachineFunction &MF);
   bool ReplaceUsesWithZeroReg(MachineRegisterInfo *MRI, const MachineInstr&);

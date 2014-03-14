@@ -13,7 +13,7 @@
 
 //===----------------------------------------------------------------------===//
 
-let TargetPrefix = "nios2" in {  // All intrinsics start with "llvm.mips.".
+let TargetPrefix = "nios2" in {  // All intrinsics start with "llvm.nios2.".
 
 // Read control reg: numreg -> int
 def int_nios2_rdctl : GCCBuiltin<"__builtin_nios2_rdctl">,
