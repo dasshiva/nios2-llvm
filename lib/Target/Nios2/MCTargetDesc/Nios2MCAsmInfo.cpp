@@ -35,6 +35,7 @@ Nios2MCAsmInfo::Nios2MCAsmInfo(StringRef TT) {
   GlobalDirective                = "\t.global\t";
   AscizDirective              = "\t.string\t";
   HasIdentDirective           = true;
+  UsesELFSectionDirectiveForBSS = true;
 
   SupportsDebugInformation = true;
   ExceptionsType = ExceptionHandling::DwarfCFI;
