@@ -19,13 +19,13 @@ using namespace llvm;
 void Nios2MCAsmInfo::anchor() { }
 
 Nios2MCAsmInfo::Nios2MCAsmInfo(StringRef TT) {
-  IsLittleEndian = false;
+  IsLittleEndian = true;
 
   AlignmentIsInBytes          = false;
   Data16bitsDirective         = "\t.2byte\t";
   Data32bitsDirective         = "\t.4byte\t";
   Data64bitsDirective         = "\t.8byte\t";
-  PrivateGlobalPrefix         = ".";
+  PrivateGlobalPrefix         = ".LC";
   CommentString               = "#";
   ZeroDirective               = "\t.space\t";
   GPRel32Directive            = "\t.gpword\t";
