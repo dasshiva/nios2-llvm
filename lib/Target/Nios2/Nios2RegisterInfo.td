@@ -32,7 +32,7 @@ let Namespace = "Nios2" in {
   def ZERO : Nios2GPRReg< 0, "zero">, DwarfRegNum<[0]>;
   def AT   : Nios2GPRReg< 1, "at">,   DwarfRegNum<[1]>;
   foreach RegNum = 2-23 in {
-    def R#RegNum : Nios2GPRReg< RegNum, "R"#RegNum>, DwarfRegNum<[RegNum]>;
+    def R#RegNum : Nios2GPRReg< RegNum, "r"#RegNum>, DwarfRegNum<[RegNum]>;
   }
   def ET   : Nios2GPRReg< 24, "et">,  DwarfRegNum<[24]>;
   def BT   : Nios2GPRReg< 25, "bt">,  DwarfRegNum<[25]>;
