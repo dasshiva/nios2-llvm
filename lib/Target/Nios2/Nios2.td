@@ -40,6 +40,7 @@ class Proc<string Name, list<SubtargetFeature> Features = []>
  : Processor<Name, Nios2GenericItineraries, Features>;
 
 def : Proc<"nios2", [FeatureHWMul, FeatureHWDiv]>;
+def : Proc<"nios2-elf", [FeatureHWMul, FeatureHWDiv]>;
 
 def Nios2AsmWriter : AsmWriter {
   string AsmWriterClassName  = "InstPrinter";
