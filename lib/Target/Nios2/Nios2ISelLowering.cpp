@@ -158,6 +158,10 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
  
   setOperationAction(ISD::TRAP, MVT::Other, Legal);
 
+  // Do not generate indirect jump for the moment
+  // TODO: Custom lower JumpTable nodes and generate jumpi instructions
+  setSupportJumpTables(false);
+
   MaxStoresPerMemcpy = 16;
 }
 
