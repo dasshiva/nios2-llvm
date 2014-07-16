@@ -471,9 +471,9 @@ SDValue Nios2TargetLowering::LowerGlobalAddress(SDValue Op,
 
   // %hi/%lo relocation
   SDValue GAHi = DAG.getTargetGlobalAddress(GV, dl, MVT::i32, 0,
-                                            Nios2II::MO_ABS_HI);
+                                            Nios2II::MO_HIADJ16);
   SDValue GALo = DAG.getTargetGlobalAddress(GV, dl, MVT::i32, 0,
-                                            Nios2II::MO_ABS_LO);
+                                            Nios2II::MO_LO16);
   SDValue HiPart = DAG.getNode(Nios2ISD::Hi, dl, VTs, &GAHi, 1);
   SDValue Lo = DAG.getNode(Nios2ISD::Lo, dl, MVT::i32, GALo);
   return DAG.getNode(ISD::ADD, dl, MVT::i32, HiPart, Lo);
@@ -638,16 +638,16 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const
 
   if (getTargetMachine().getRelocationModel() != Reloc::PIC_) {
     SDValue CPHi = DAG.getTargetConstantPool(C, MVT::i32, N->getAlignment(),
-                                             N->getOffset(), Nios2II::MO_ABS_HI);
+                                             N->getOffset(), Nios2II::MO_HIADJ16);
     SDValue CPLo = DAG.getTargetConstantPool(C, MVT::i32, N->getAlignment(),
-                                             N->getOffset(), Nios2II::MO_ABS_LO);
+                                             N->getOffset(), Nios2II::MO_LO16);
     SDValue HiPart = DAG.getNode(Nios2ISD::Hi, dl, MVT::i32, CPHi);
     SDValue Lo = DAG.getNode(Nios2ISD::Lo, dl, MVT::i32, CPLo);
     ResNode = DAG.getNode(ISD::ADD, dl, MVT::i32, HiPart, Lo);
   } else {
     EVT ValTy = Op.getValueType();
     unsigned GOTFlag = Nios2II::MO_GOT;
-    unsigned OFSTFlag = Nios2II::MO_ABS_LO;
+    unsigned OFSTFlag = Nios2II::MO_LO16;
     SDValue CP = DAG.getTargetConstantPool(C, ValTy, N->getAlignment(),
                                            N->getOffset(), GOTFlag);
     CP = DAG.getNode(Nios2ISD::Wrapper, dl, ValTy, GetGlobalReg(DAG, ValTy), CP);
@@ -1378,7 +1378,7 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
     if (IsPICCall && G->getGlobal()->hasInternalLinkage()) {
       OpFlag = Nios2II::MO_GOT_PAGE;
-      unsigned char LoFlag = Nios2II::MO_ABS_LO;
+      unsigned char LoFlag = Nios2II::MO_LO16;
       Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0,
                                           OpFlag);
       CalleeLo = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(),

@@ -138,9 +138,9 @@ void Nios2DAGToDAGISel::InitGlobalBaseReg(MachineFunction &MF) {
     // lui   $v0, %hi(__gnu_local_gp)
     // addiu $globalbasereg, $v0, %lo(__gnu_local_gp)
     BuildMI(MBB, I, DL, TII.get(Nios2::ORhi), V0)
-      .addExternalSymbol("__gnu_local_gp", Nios2II::MO_ABS_HI);
+      .addExternalSymbol("__gnu_local_gp", Nios2II::MO_HIADJ16);
     BuildMI(MBB, I, DL, TII.get(Nios2::ADDi), GlobalBaseReg).addReg(V0)
-      .addExternalSymbol("__gnu_local_gp", Nios2II::MO_ABS_LO);
+      .addExternalSymbol("__gnu_local_gp", Nios2II::MO_LO16);
     return;
   }
 

@@ -294,20 +294,8 @@ void Nios2AsmPrinter::printOperand(const MachineInstr *MI, int opNum,
     closeP = true;
 
   switch(MO.getTargetFlags()) {
-  case Nios2II::MO_GPREL:    O << "%gp_rel("; break;
-  case Nios2II::MO_GOT_CALL: O << "%call16("; break;
-  case Nios2II::MO_GOT:      O << "%got(";    break;
-  case Nios2II::MO_ABS_HI:   O << "%hi(";     break;
-  case Nios2II::MO_ABS_LO:   O << "%lo(";     break;
-  case Nios2II::MO_TLSGD:    O << "%tlsgd(";  break;
-  case Nios2II::MO_GOTTPREL: O << "%gottprel("; break;
-  case Nios2II::MO_TPREL_HI: O << "%tprel_hi("; break;
-  case Nios2II::MO_TPREL_LO: O << "%tprel_lo("; break;
-  case Nios2II::MO_GPOFF_HI: O << "%hi(%neg(%gp_rel("; break;
-  case Nios2II::MO_GPOFF_LO: O << "%lo(%neg(%gp_rel("; break;
-  case Nios2II::MO_GOT_DISP: O << "%got_disp("; break;
-  case Nios2II::MO_GOT_PAGE: O << "%got_page("; break;
-  case Nios2II::MO_GOT_OFST: O << "%got_ofst("; break;
+  case Nios2II::MO_HIADJ16:  O << "%hiadj(";     break;
+  case Nios2II::MO_LO16:      O << "%lo(";     break;
   }
 
   switch (MO.getType()) {
