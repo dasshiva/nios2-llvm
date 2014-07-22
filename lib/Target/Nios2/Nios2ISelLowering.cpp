@@ -2182,7 +2182,8 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
 
       /* res = PHI resx, resy */
       BuildMI(ExitBB, DL, TII->get(TargetOpcode::PHI), res)
-        .addReg(resx).addReg(resy);
+        .addReg(resx).addMBB(BB1)
+        .addReg(resy).addMBB(BB2);
 
       ExitBB->splice(ExitBB->end(), BB, llvm::next(I), BB->end());
       ExitBB->transferSuccessorsAndUpdatePHIs(BB);
