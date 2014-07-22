@@ -99,7 +99,7 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   //setOperationAction(ISD::GlobalTLSAddress,   MVT::i32,   Custom);
   //setOperationAction(ISD::JumpTable,          MVT::i32,   Custom);
   //setOperationAction(ISD::ConstantPool,       MVT::i32,   Custom);
-  //setOperationAction(ISD::SELECT,             MVT::i32,   Custom);
+  setOperationAction(ISD::SELECT,             MVT::i32,   Expand);
   //setOperationAction(ISD::BRCOND,             MVT::Other, Custom);
   //setOperationAction(ISD::VASTART,            MVT::Other, Custom);
   setOperationAction(ISD::ATOMIC_FENCE,       MVT::Other, Custom);
@@ -119,7 +119,7 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   // Operations not directly supported by Nios2.
   setOperationAction(ISD::BR_JT,             MVT::Other, Expand);
   setOperationAction(ISD::BR_CC,             MVT::i32,   Expand);
-  setOperationAction(ISD::SELECT_CC,         MVT::i32, Custom);
+  setOperationAction(ISD::SELECT_CC,         MVT::i32,   Custom);
   setOperationAction(ISD::UINT_TO_FP,        MVT::i32,   Expand);
   setOperationAction(ISD::FP_TO_UINT,        MVT::i32,   Expand);
   setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1,    Expand);
@@ -177,7 +177,8 @@ bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) cons
   }
 }
 
-EVT Nios2TargetLowering::getSetCCResultType(LLVMContext &Context, EVT VT) const {
+EVT Nios2TargetLowering::getSetCCResultType(LLVMContext &Context,
+    EVT VT) const {
   return MVT::i32;
 }
 
