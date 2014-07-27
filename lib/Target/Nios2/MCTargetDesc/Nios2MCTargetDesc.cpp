@@ -42,7 +42,7 @@ static MCInstrInfo *createNios2MCInstrInfo() {
 
 static MCRegisterInfo *createNios2MCRegisterInfo(StringRef TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  InitNios2MCRegisterInfo(X, Nios2::PC);
+  InitNios2MCRegisterInfo(X, Nios2::RA, 0, 0, Nios2::PC);
   return X;
 }
 
