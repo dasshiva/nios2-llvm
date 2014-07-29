@@ -29,6 +29,8 @@ def CC_Nios2Std : CallingConv<[
   // Integer arguments are passed in integer registers.
   CCIfType<[i32], CCAssignToReg<[R4, R5, R6, R7]>>,
 
+  CCIfByVal<CCPassByVal<4, 4>>,
+
   CCIfType<[i32], CCAssignToStack<4, 4>>
 ]>;
 
@@ -42,6 +44,8 @@ def CC_Nios2_FastCC : CallingConv<[
 
   // Integer arguments are passed in integer registers.
   CCIfType<[i32], CCAssignToReg<[R4, R5, R6, R7]>>,
+
+  CCIfByVal<CCPassByVal<4, 4>>,
 
   // Stack parameter slots for i32 is 32-bit words and 4-byte aligned.
   CCIfType<[i32], CCAssignToStack<4, 4>>

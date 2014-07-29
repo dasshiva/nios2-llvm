@@ -1074,12 +1074,12 @@ WriteByValArg(SDValue Chain, SDLoc dl,
               MachineFrameInfo *MFI, SelectionDAG &DAG, SDValue Arg,
               const CCValAssign &VA, const ISD::ArgFlagsTy &Flags,
               MVT PtrType, bool isLittle) {
-  unsigned LocMemOffset = VA.getLocMemOffset();
+  unsigned LocMemOffset = VA.isMemLoc() ? VA.getLocMemOffset() : 0;
   unsigned Offset = 0;
   uint32_t RemainingSize = Flags.getByValSize();
   unsigned ByValAlign = Flags.getByValAlign();
 
-  // Copy the first 4 words of byval arg to registers A0 - A3.
+  // Copy the first 4 words of byval arg to registers R4 - R7.
   // FIXME: Use a stricter alignment if it enables better optimization in passes
   //        run later.
   for (; RemainingSize >= 4 && LocMemOffset < 4 * 4;
@@ -1156,94 +1156,6 @@ WriteByValArg(SDValue Chain, SDLoc dl,
                         MachinePointerInfo(0), MachinePointerInfo(0));
   MemOpChains.push_back(Chain);
 }
-
-// Copy Nios264 byVal arg to registers and stack.
-//void static
-//PassByValArg64(SDValue Chain, DebugLoc dl,
-//               SmallVector<std::pair<unsigned, SDValue>, 16> &RegsToPass,
-//               SmallVector<SDValue, 8> &MemOpChains, SDValue StackPtr,
-//               MachineFrameInfo *MFI, SelectionDAG &DAG, SDValue Arg,
-//               const CCValAssign &VA, const ISD::ArgFlagsTy &Flags,
-//               EVT PtrTy, bool isLittle) {
-//  unsigned ByValSize = Flags.getByValSize();
-//  unsigned Alignment = std::min(Flags.getByValAlign(), (unsigned)8);
-//  bool IsRegLoc = VA.isRegLoc();
-//  unsigned Offset = 0; // Offset in # of bytes from the beginning of struct.
-//  unsigned LocMemOffset = 0;
-//  unsigned MemCpySize = ByValSize;
-//
-//  if (!IsRegLoc)
-//    LocMemOffset = VA.getLocMemOffset();
-//  else {
-//    const uint16_t *Reg = std::find(Nios264IntRegs, Nios264IntRegs + 8,
-//                                    VA.getLocReg());
-//    const uint16_t *RegEnd = Nios264IntRegs + 8;
-//
-//    // Copy double words to registers.
-//    for (; (Reg != RegEnd) && (ByValSize >= Offset + 8); ++Reg, Offset += 8) {
-//      SDValue LoadPtr = DAG.getNode(ISD::ADD, dl, PtrTy, Arg,
-//                                    DAG.getConstant(Offset, PtrTy));
-//      SDValue LoadVal = DAG.getLoad(MVT::i64, dl, Chain, LoadPtr,
-//                                    MachinePointerInfo(), false, false, false,
-//                                    Alignment);
-//      MemOpChains.push_back(LoadVal.getValue(1));
-//      RegsToPass.push_back(std::make_pair(*Reg, LoadVal));
-//    }
-//
-//    // Return if the struct has been fully copied.
-//    if (!(MemCpySize = ByValSize - Offset))
-//      return;
-//
-//    // If there is an argument register available, copy the remainder of the
-//    // byval argument with sub-doubleword loads and shifts.
-//    if (Reg != RegEnd) {
-//      assert((ByValSize < Offset + 8) &&
-//             "Size of the remainder should be smaller than 8-byte.");
-//      SDValue Val;
-//      for (unsigned LoadSize = 4; Offset < ByValSize; LoadSize /= 2) {
-//        unsigned RemSize = ByValSize - Offset;
-//
-//        if (RemSize < LoadSize)
-//          continue;
-//
-//        SDValue LoadPtr = DAG.getNode(ISD::ADD, dl, PtrTy, Arg,
-//                                      DAG.getConstant(Offset, PtrTy));
-//        SDValue LoadVal =
-//          DAG.getExtLoad(ISD::ZEXTLOAD, dl, MVT::i64, Chain, LoadPtr,
-//                         MachinePointerInfo(), MVT::getIntegerVT(LoadSize * 8),
-//                         false, false, Alignment);
-//        MemOpChains.push_back(LoadVal.getValue(1));
-//
-//        // Offset in number of bits from double word boundary.
-//        unsigned OffsetDW = (Offset % 8) * 8;
-//        unsigned Shamt = isLittle ? OffsetDW : 64 - (OffsetDW + LoadSize * 8);
-//        SDValue Shift = DAG.getNode(ISD::SHL, dl, MVT::i64, LoadVal,
-//                                    DAG.getConstant(Shamt, MVT::i32));
-//
-//        Val = Val.getNode() ? DAG.getNode(ISD::OR, dl, MVT::i64, Val, Shift) :
-//                              Shift;
-//        Offset += LoadSize;
-//        Alignment = std::min(Alignment, LoadSize);
-//      }
-//
-//      RegsToPass.push_back(std::make_pair(*Reg, Val));
-//      return;
-//    }
-//  }
-//
-//  assert(MemCpySize && "MemCpySize must not be zero.");
-//
-//  // Copy remainder of byval arg to it with memcpy.
-//  SDValue Src = DAG.getNode(ISD::ADD, dl, PtrTy, Arg,
-//                            DAG.getConstant(Offset, PtrTy));
-//  SDValue Dst = DAG.getNode(ISD::ADD, dl, MVT::i64, StackPtr,
-//                            DAG.getIntPtrConstant(LocMemOffset));
-//  Chain = DAG.getMemcpy(Chain, dl, Dst, Src,
-//                        DAG.getConstant(MemCpySize, PtrTy), Alignment,
-//                        /*isVolatile=*/false, /*AlwaysInline=*/false,
-//                        MachinePointerInfo(0), MachinePointerInfo(0));
-//  MemOpChains.push_back(Chain);
-//}
 
 /// LowerCall - functions arguments are copied from virtual regs to
 /// (physical regs)/(stack frame), CALLSEQ_START and CALLSEQ_END are emitted.
