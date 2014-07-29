@@ -742,9 +742,9 @@ multiclass SetCmpPats<RegisterClass RC, PatFrag setop, PatFrag setopu,
            Instruction cmp, Instruction cmpu,
            Instruction cmpi, Instruction cmpui>:
   SetCmpImmPats<RC, cmpi, cmpui> {
-  def #NAME# : Nios2Pat<(setgt RC:$lhs, RC:$rhs),
+  def #NAME# : Nios2Pat<(setop RC:$lhs, RC:$rhs),
                 (cmp RC:$rhs, RC:$lhs)>;
-  def u : Nios2Pat<(setugt RC:$lhs, RC:$rhs),
+  def u : Nios2Pat<(setopu RC:$lhs, RC:$rhs),
                 (cmpu RC:$rhs, RC:$lhs)>;
 }
 
