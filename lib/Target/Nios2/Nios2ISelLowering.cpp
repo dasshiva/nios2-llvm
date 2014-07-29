@@ -101,7 +101,7 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   //setOperationAction(ISD::ConstantPool,       MVT::i32,   Custom);
   setOperationAction(ISD::SELECT,             MVT::i32,   Expand);
   //setOperationAction(ISD::BRCOND,             MVT::Other, Custom);
-  //setOperationAction(ISD::VASTART,            MVT::Other, Custom);
+  setOperationAction(ISD::VASTART,            MVT::Other, Custom);
   setOperationAction(ISD::ATOMIC_FENCE,       MVT::Other, Custom);
 
   setOperationAction(ISD::SREM, MVT::i32, Expand);
@@ -437,7 +437,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
     //case ISD::SELECT:             return LowerSELECT(Op, DAG);
     case ISD::SELECT_CC:          return lowerSELECT_CC(Op, DAG);
     //case ISD::SETCC:              return LowerSETCC(Op, DAG);
-    //case ISD::VASTART:            return LowerVASTART(Op, DAG);
+    case ISD::VASTART:            return LowerVASTART(Op, DAG);
     //case ISD::FCOPYSIGN:          return LowerFCOPYSIGN(Op, DAG);
     //case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG);
     //case ISD::RETURNADDR:         return LowerRETURNADDR(Op, DAG);
@@ -664,20 +664,20 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const
   return ResNode;
 }
 
-//SDValue Nios2TargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
-//  MachineFunction &MF = DAG.getMachineFunction();
-//  Nios2FunctionInfo *FuncInfo = MF.getInfo<Nios2FunctionInfo>();
-//
-//  DebugLoc dl = Op.getDebugLoc();
-//  SDValue FI = DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(),
-//                                 getPointerTy());
-//
-//  // vastart just stores the address of the VarArgsFrameIndex slot into the
-//  // memory location argument.
-//  const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
-//  return DAG.getStore(Op.getOperand(0), dl, FI, Op.getOperand(1),
-//                      MachinePointerInfo(SV), false, false, 0);
-//}
+SDValue Nios2TargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
+  MachineFunction &MF = DAG.getMachineFunction();
+  Nios2FunctionInfo *FuncInfo = MF.getInfo<Nios2FunctionInfo>();
+
+  SDLoc dl(Op);
+  SDValue FI = DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(),
+                                 getPointerTy());
+
+  // vastart just stores the address of the VarArgsFrameIndex slot into the
+  // memory location argument.
+  const Value *SV = cast<SrcValueSDNode>(Op.getOperand(2))->getValue();
+  return DAG.getStore(Op.getOperand(0), dl, FI, Op.getOperand(1),
+                      MachinePointerInfo(SV), false, false, 0);
+}
 
 //SDValue Nios2TargetLowering::
 //LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG) const {
