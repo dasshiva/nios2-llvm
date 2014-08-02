@@ -1422,10 +1422,10 @@ static void ReadByValArg(MachineFunction &MF, SDValue Chain, SDLoc dl,
                          SelectionDAG &DAG, unsigned NumWords, SDValue FIN,
                          const CCValAssign &VA, const ISD::ArgFlagsTy &Flags,
                          const Argument *FuncArg) {
-  unsigned LocMem = VA.getLocMemOffset();
+  unsigned LocMem = VA.isMemLoc() ? VA.getLocMemOffset() : 0;
   unsigned FirstWord = LocMem / 4;
 
-  // copy register A0 - A3 to frame object
+  // copy register R0 - R3 to frame object
   for (unsigned i = 0; i < NumWords; ++i) {
     unsigned CurWord = FirstWord + i;
     if (CurWord >= O32IntRegsSize)
@@ -1524,8 +1524,9 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
       assert(Flags.getByValSize() &&
              "ByVal args of size 0 should have been ignored by front-end.");
       unsigned NumWords = (Flags.getByValSize() + 3) / 4;
-      LastFI = MFI->CreateFixedObject(NumWords * 4, VA.getLocMemOffset(),
-                                      true);
+      LastFI = MFI->CreateFixedObject(NumWords * 4,
+          VA.isMemLoc() ? VA.getLocMemOffset() : 0,
+          true);
       SDValue FIN = DAG.getFrameIndex(LastFI, getPointerTy());
       InVals.push_back(FIN);
       ReadByValArg(MF, Chain, dl, OutChains, DAG, NumWords, FIN, VA, Flags,
