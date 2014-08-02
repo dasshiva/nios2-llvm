@@ -19,32 +19,32 @@ let TargetPrefix = "nios2" in {  // All intrinsics start with "llvm.nios2.".
 def int_nios2_rdctl : GCCBuiltin<"__builtin_nios2_rdctl">,
   Intrinsic<[llvm_i32_ty], [llvm_i32_ty]>;
 // Write control reg: numreg -> val -> void
-def int_nios2_wrctl : GCCBuiltin<"__builtin_nios2_wrctl">,
+def int_nios2_wrctl : GCCBuiltin<"__builtin_wrctl">,
   Intrinsic<[], [llvm_i32_ty, llvm_i32_ty]>;
 
 // IO instructions
-def int_nios2_ldbio: GCCBuiltin<"__builtin_nios2_ldbio">,
+def int_nios2_ldbio: GCCBuiltin<"__builtin_ldbio">,
   Intrinsic<[llvm_i8_ty], [llvm_anyptr_ty]>;
-def int_nios2_ldbuio: GCCBuiltin<"__builtin_nios2_ldbuio">,
+def int_nios2_ldbuio: GCCBuiltin<"__builtin_ldbuio">,
   Intrinsic<[llvm_i8_ty], [llvm_anyptr_ty]>;
-def int_nios2_ldhio: GCCBuiltin<"__builtin_nios2_ldhio">,
+def int_nios2_ldhio: GCCBuiltin<"__builtin_ldhio">,
   Intrinsic<[llvm_i16_ty], [llvm_anyptr_ty]>;
-def int_nios2_ldhuio: GCCBuiltin<"__builtin_nios2_ldhuio">,
+def int_nios2_ldhuio: GCCBuiltin<"__builtin_ldhuio">,
   Intrinsic<[llvm_i16_ty], [llvm_anyptr_ty]>;
-def int_nios2_ldwio: GCCBuiltin<"__builtin_nios2_ldwio">,
+def int_nios2_ldwio: GCCBuiltin<"__builtin_ldwio">,
   Intrinsic<[llvm_i32_ty], [llvm_anyptr_ty]>;
-def int_nios2_ldwuio: GCCBuiltin<"__builtin_nios2_ldwuio">,
+def int_nios2_ldwuio: GCCBuiltin<"__builtin_ldwuio">,
   Intrinsic<[llvm_i32_ty], [llvm_anyptr_ty]>;
 
-def int_nios2_stbio: GCCBuiltin<"__builtin_nios2_stbio">,
+def int_nios2_stbio: GCCBuiltin<"__builtin_stbio">,
   Intrinsic<[], [llvm_i8_ty, llvm_anyptr_ty]>;
-def int_nios2_sthio: GCCBuiltin<"__builtin_nios2_sthio">,
+def int_nios2_sthio: GCCBuiltin<"__builtin_sthio">,
   Intrinsic<[], [llvm_i16_ty, llvm_anyptr_ty]>;
-def int_nios2_stwio: GCCBuiltin<"__builtin_nios2_stwio">,
+def int_nios2_stwio: GCCBuiltin<"__builtin_stwio">,
   Intrinsic<[], [llvm_i32_ty, llvm_anyptr_ty]>;
 
 // Barrier
-def int_nios2_sync: GCCBuiltin<"__builtin_nios2_sync">,
+def int_nios2_sync: GCCBuiltin<"__builtin_sync">,
   Intrinsic<[], [llvm_i32_ty]>;
 
 }
