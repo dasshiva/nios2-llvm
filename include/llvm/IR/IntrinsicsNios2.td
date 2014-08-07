@@ -16,7 +16,7 @@
 let TargetPrefix = "nios2" in {  // All intrinsics start with "llvm.nios2.".
 
 // Read control reg: numreg -> int
-def int_nios2_rdctl : GCCBuiltin<"__builtin_nios2_rdctl">,
+def int_nios2_rdctl : GCCBuiltin<"__builtin_rdctl">,
   Intrinsic<[llvm_i32_ty], [llvm_i32_ty]>;
 // Write control reg: numreg -> val -> void
 def int_nios2_wrctl : GCCBuiltin<"__builtin_wrctl">,
