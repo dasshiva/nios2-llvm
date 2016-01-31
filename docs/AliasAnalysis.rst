@@ -51,7 +51,7 @@ starting address and size, and function calls are represented as the actual
 get mod/ref information for arbitrary instructions.
 
 All ``AliasAnalysis`` interfaces require that in queries involving multiple
-values, values which are not `constants <LangRef.html#constants>`_ are all
+values, values which are not :ref:`constants <constants>` are all
 defined within the same function.
 
 Representation of Pointers
@@ -111,7 +111,7 @@ returns MustAlias, PartialAlias, MayAlias, or NoAlias as appropriate.
 
 Like all ``AliasAnalysis`` interfaces, the ``alias`` method requires that either
 the two pointer values be defined within the same function, or at least one of
-the values is a `constant <LangRef.html#constants>`_.
+the values is a :ref:`constant <constants>`.
 
 .. _Must, May, or No:
 
@@ -126,7 +126,7 @@ used for reading memory. Another is when the memory is freed and reallocated
 between accesses through one pointer and accesses through the other --- in this
 case, there is a dependence, but it's mediated by the free and reallocation.
 
-As an exception to this is with the `noalias <LangRef.html#noalias>`_ keyword;
+As an exception to this is with the :ref:`noalias <noalias>` keyword;
 the "irrelevant" dependencies are ignored.
 
 The ``MayAlias`` response is used whenever the two pointers might refer to the
@@ -190,7 +190,7 @@ this property are side-effect free, only depending on their input arguments and
 the state of memory when they are called.  This property allows calls to these
 functions to be eliminated and moved around, as long as there is no store
 instruction that changes the contents of memory.  Note that all functions that
-satisfy the ``doesNotAccessMemory`` method also satisfies ``onlyReadsMemory``.
+satisfy the ``doesNotAccessMemory`` method also satisfy ``onlyReadsMemory``.
 
 Writing a new ``AliasAnalysis`` Implementation
 ==============================================
@@ -246,6 +246,20 @@ analysis run method (``run`` for a ``Pass``, ``runOnFunction`` for a
     return false;
   }
 
+Required methods to override
+----------------------------
+
+You must override the ``getAdjustedAnalysisPointer`` method on all subclasses
+of ``AliasAnalysis``. An example implementation of this method would look like:
+
+.. code-block:: c++
+
+  void *getAdjustedAnalysisPointer(const void* ID) override {
+    if (ID == &AliasAnalysis::ID)
+      return (AliasAnalysis*)this;
+    return this;
+  }
+
 Interfaces which may be specified
 ---------------------------------
 
@@ -272,8 +286,8 @@ Mod/Ref result, simply return whatever the superclass computes.  For example:
 
 .. code-block:: c++
 
-  AliasAnalysis::AliasResult alias(const Value *V1, unsigned V1Size,
-                                   const Value *V2, unsigned V2Size) {
+  AliasResult alias(const Value *V1, unsigned V1Size,
+                    const Value *V2, unsigned V2Size) {
     if (...)
       return NoAlias;
     ...
@@ -375,11 +389,10 @@ in its ``getAnalysisUsage`` that it does so. Some passes attempt to use
 ``AU.addPreserved<AliasAnalysis>``, however this doesn't actually have any
 effect.
 
-``AliasAnalysisCounter`` (``-count-aa``) and ``AliasDebugger`` (``-debug-aa``)
-are implemented as ``ModulePass`` classes, so if your alias analysis uses
-``FunctionPass``, it won't be able to use these utilities. If you try to use
-them, the pass manager will silently route alias analysis queries directly to
-``BasicAliasAnalysis`` instead.
+``AliasAnalysisCounter`` (``-count-aa``) are implemented as ``ModulePass``
+classes, so if your alias analysis uses ``FunctionPass``, it won't be able to
+use these utilities. If you try to use them, the pass manager will silently
+route alias analysis queries directly to ``BasicAliasAnalysis`` instead.
 
 Similarly, the ``opt -p`` option introduces ``ModulePass`` passes between each
 pass, which prevents the use of ``FunctionPass`` alias analysis passes.
@@ -621,7 +634,7 @@ transformations:
 * It uses mod/ref information to hoist function calls out of loops that do not
   write to memory and are loop-invariant.
 
-* If uses alias information to promote memory objects that are loaded and stored
+* It uses alias information to promote memory objects that are loaded and stored
   to in loops to live in a register instead.  It can do this if there are no may
   aliases to the loaded/stored memory location.
 
