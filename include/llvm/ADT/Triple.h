@@ -113,7 +113,6 @@ public:
     KalimbaSubArch_v3,
     KalimbaSubArch_v4,
     KalimbaSubArch_v5
->>>>>>> llvm/release_38
   };
   enum VendorType {
     UnknownVendor,

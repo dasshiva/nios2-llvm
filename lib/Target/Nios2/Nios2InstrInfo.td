@@ -437,7 +437,7 @@ class Mult<bits<6> func, string instr_asm, InstrItinClass itin,
   let shamt = 0;
   let isCommutable = 1;
   let Defs = DefRegs;
-  let neverHasSideEffects = 1;
+  let hasSideEffects = 0;
 }
 
 // Access control registers
@@ -486,7 +486,7 @@ def ADJCALLSTACKUP   : Nios2Pseudo<(outs), (ins i32imm:$amt1, i32imm:$amt2),
 // directives. If the real instructions corresponding these directives
 // are used, we have the same behavior, but get also a bunch of warnings
 // from the assembler.
-let neverHasSideEffects = 1 in
+let hasSideEffects = 0 in
 def CPRESTORE : Nios2Pseudo<(outs), (ins i32imm:$loc, CPURegs:$gp),
                          ".cprestore\t$loc", []>;
 

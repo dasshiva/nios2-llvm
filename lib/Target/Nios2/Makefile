@@ -13,7 +13,7 @@ TARGET = Nios2
 
 # Make sure that tblgen is run, first thing.
 BUILT_SOURCES = Nios2GenRegisterInfo.inc Nios2GenInstrInfo.inc \
-                Nios2GenAsmWriter.inc Nios2GenCodeEmitter.inc \
+                Nios2GenAsmWriter.inc Nios2GenMCCodeEmitter.inc \
                 Nios2GenDAGISel.inc Nios2GenCallingConv.inc \
                 Nios2GenSubtargetInfo.inc Nios2GenMCCodeEmitter.inc \
                 Nios2GenDisassemblerTables.inc Nios2GenAsmMatcher.inc
