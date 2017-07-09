@@ -56,7 +56,8 @@ getCalleeSavedRegs(const MachineFunction *MF) const {
 }
 
 const uint32_t*
-Nios2RegisterInfo::getCallPreservedMask(CallingConv::ID) const {
+Nios2RegisterInfo::getCallPreservedMask(const MachineFunction &MF, 
+                                        CallingConv::ID) const {
   return CSR_STD_RegMask;
 }
 
