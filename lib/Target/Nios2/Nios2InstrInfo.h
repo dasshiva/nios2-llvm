@@ -41,58 +41,51 @@ public:
   ///
   const Nios2RegisterInfo &getRegisterInfo() const { return RI; }
 
-  virtual void storeRegToStackSlot(MachineBasicBlock &MBB,
-                                   MachineBasicBlock::iterator MBBI,
-                                   unsigned SrcReg, bool isKill, int FrameIndex,
-                                   const TargetRegisterClass *RC,
-                                   const TargetRegisterInfo *TRI) const;
+  void storeRegToStackSlot(MachineBasicBlock &MBB,
+                           MachineBasicBlock::iterator MBBI,
+                           unsigned SrcReg, bool isKill, int FrameIndex,
+                           const TargetRegisterClass *RC,
+                           const TargetRegisterInfo *TRI) const override;
 
-  virtual void loadRegFromStackSlot(MachineBasicBlock &MBB,
-                                    MachineBasicBlock::iterator MBBI,
-                                    unsigned DestReg, int FrameIndex,
-                                    const TargetRegisterClass *RC,
-                                    const TargetRegisterInfo *TRI) const;
+  void loadRegFromStackSlot(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MBBI,
+                            unsigned DestReg, int FrameIndex,
+                            const TargetRegisterClass *RC,
+                            const TargetRegisterInfo *TRI) const override;
 
-  virtual void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+  void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    DebugLoc DL, unsigned DestReg, unsigned SrcReg,
-                   bool KillSrc) const;
+                   bool KillSrc) const override;
 
   /// Adjust SP by Amount bytes.
   void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
                       MachineBasicBlock::iterator I) const;
 
-  virtual bool expandPostRAPseudo(MachineBasicBlock::iterator MI) const;
+  bool expandPostRAPseudo(MachineBasicBlock::iterator MI) const override;
 
   /// Branch Analysis
-  virtual bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
-                             MachineBasicBlock *&FBB,
-                             SmallVectorImpl<MachineOperand> &Cond,
-                             bool AllowModify) const;
+  bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
+                     MachineBasicBlock *&FBB,
+                     SmallVectorImpl<MachineOperand> &Cond,
+                     bool AllowModify) const override;
 
-  virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const;
+  unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
 
-  virtual unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
-                                MachineBasicBlock *FBB,
-                                const SmallVectorImpl<MachineOperand> &Cond,
-                                DebugLoc DL) const;
+  unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
+                        MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
+                        DebugLoc DL) const override;
 
-  virtual
-  bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const;
+  bool
+  ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
 
-  virtual MachineInstr* emitFrameIndexDebugValue(MachineFunction &MF,
-                                                 int FrameIx, uint64_t Offset,
-                                                 const MDNode *MDPtr,
-                                                 DebugLoc DL) const;
+  MachineInstr* emitFrameIndexDebugValue(MachineFunction &MF,
+                                         int FrameIx, uint64_t Offset,
+                                         const MDNode *MDPtr,
+                                         DebugLoc DL) const;
 
   /// Insert nop instruction when hazard condition is found
   virtual void insertNoop(MachineBasicBlock &MBB,
                           MachineBasicBlock::iterator MI) const;
-
-  /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
-  /// such, whenever a client has an instance of instruction info, it should
-  /// always be able to get register info as well (through this method).
-  ///
-  //const Nios2RegisterInfo &getRegisterInfo() const { return RI; }
 
   virtual unsigned GetOppositeBranchOpc(unsigned Opc) const;
 
@@ -119,8 +112,8 @@ private:
                      MachineBasicBlock *&BB,
                      SmallVectorImpl<MachineOperand> &Cond) const;
 
-  void BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB, DebugLoc DL,
-                   const SmallVectorImpl<MachineOperand>& Cond) const;
+  void BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB, 
+                   DebugLoc DL, ArrayRef<MachineOperand> Cond) const;
 };
 
 }

@@ -175,10 +175,9 @@ bool Nios2InstrInfo::AnalyzeBranch(MachineBasicBlock &MBB,
   return false;
 }
 
-void Nios2InstrInfo::BuildCondBr(MachineBasicBlock &MBB,
-                                MachineBasicBlock *TBB, DebugLoc DL,
-                                const SmallVectorImpl<MachineOperand>& Cond)
-  const {
+void 
+Nios2InstrInfo::BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB, 
+                            DebugLoc DL, ArrayRef<MachineOperand> Cond) const {
   unsigned Opc = Cond[0].getImm();
   const MCInstrDesc &MCID = get(Opc);
   MachineInstrBuilder MIB = BuildMI(&MBB, DL, MCID);
@@ -197,8 +196,7 @@ void Nios2InstrInfo::BuildCondBr(MachineBasicBlock &MBB,
 unsigned Nios2InstrInfo::
 InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
              MachineBasicBlock *FBB,
-             const SmallVectorImpl<MachineOperand> &Cond,
-             DebugLoc DL) const {
+             ArrayRef<MachineOperand> Cond, DebugLoc DL) const {
   // Shouldn't be a fall through.
   assert(TBB && "InsertBranch must not be told to insert a fallthrough");
 
@@ -226,9 +224,7 @@ InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
   return 1;
 }
 
-unsigned Nios2InstrInfo::
-RemoveBranch(MachineBasicBlock &MBB) const
-{
+unsigned Nios2InstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   MachineBasicBlock::reverse_iterator I = MBB.rbegin(), REnd = MBB.rend();
   MachineBasicBlock::reverse_iterator FirstBr;
   unsigned removed;
