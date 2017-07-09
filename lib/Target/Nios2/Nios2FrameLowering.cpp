@@ -15,6 +15,7 @@
 #include "Nios2InstrInfo.h"
 #include "Nios2MachineFunction.h"
 #include "Nios2TargetMachine.h"
+#include "Nios2TargetObjectFile.h"
 #include "MCTargetDesc/Nios2BaseInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -26,6 +27,10 @@
 #include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
+
+const Nios2FrameLowering *Nios2FrameLowering::create(const Nios2Subtarget &ST) {
+  return new Nios2FrameLowering(ST);
+}
 
 static MCCFIInstruction convertMoveToCFI(const MCRegisterInfo &MRI,
                                          MCSymbol *Label,
@@ -51,13 +56,13 @@ static MCCFIInstruction convertMoveToCFI(const MCRegisterInfo &MRI,
       Label, MRI.getDwarfRegNum(Src.getReg(), true), Dst.getOffset());
 }
 
-void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
-  MachineBasicBlock &MBB   = MF.front();
-  MachineFrameInfo *MFI    = MF.getFrameInfo();
+void Nios2FrameLowering::emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
+  MachineFrameInfo *MFI = MF.getFrameInfo();
   const Nios2InstrInfo &TII =
-    *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
-  const Nios2RegisterInfo &MRI =
-    *static_cast<const Nios2RegisterInfo*>(MF.getTarget().getRegisterInfo());
+    *static_cast<const Nios2InstrInfo*>(MF.getSubtarget().getInstrInfo());
+  const Nios2RegisterInfo &RegInfo =
+    *static_cast<const Nios2RegisterInfo*>(MF.getSubtarget().getRegisterInfo());
+
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();
   unsigned SP = Nios2::SP;
@@ -72,18 +77,17 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
   if (StackSize == 0 && !MFI->adjustsStack()) return;
 
   MachineModuleInfo &MMI = MF.getMMI();
+  const MCRegisterInfo *MRI = MMI.getContext().getRegisterInfo();
   MachineLocation DstML, SrcML;
 
   // Adjust stack.
   TII.adjustStackPtr(SP, -StackSize, MBB, MBBI);
 
   // emit ".cfi_def_cfa_offset StackSize"
-  MCSymbol *AdjustSPLabel = MMI.getContext().CreateTempSymbol();
-  BuildMI(MBB, MBBI, dl,
-          TII.get(TargetOpcode::PROLOG_LABEL)).addSym(AdjustSPLabel);
-  DstML = MachineLocation(MachineLocation::VirtualFP);
-  SrcML = MachineLocation(MachineLocation::VirtualFP, -StackSize);
-  MMI.addFrameInst(convertMoveToCFI(MRI, AdjustSPLabel, DstML, SrcML));
+  unsigned CFIIndex = MMI.addFrameInst(
+      MCCFIInstruction::createDefCfaOffset(nullptr, -StackSize));
+  BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+      .addCFIIndex(CFIIndex);
 
   const std::vector<CalleeSavedInfo> &CSI = MFI->getCalleeSavedInfo();
 
@@ -95,43 +99,36 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF) const {
 
     // Iterate over list of callee-saved registers and emit .cfi_offset
     // directives.
-    MCSymbol *CSLabel = MMI.getContext().CreateTempSymbol();
-    BuildMI(MBB, MBBI, dl,
-            TII.get(TargetOpcode::PROLOG_LABEL)).addSym(CSLabel);
-
     for (std::vector<CalleeSavedInfo>::const_iterator I = CSI.begin(),
            E = CSI.end(); I != E; ++I) {
       int64_t Offset = MFI->getObjectOffset(I->getFrameIdx());
       unsigned Reg = I->getReg();
-
-      // Reg is in CPURegs
-      DstML = MachineLocation(MachineLocation::VirtualFP, Offset);
-      SrcML = MachineLocation(Reg);
-      MMI.addFrameInst(convertMoveToCFI(MRI, CSLabel, DstML, SrcML));
+      unsigned CFIIndex = MMI.addFrameInst(MCCFIInstruction::createOffset(
+        nullptr, MRI->getDwarfRegNum(Reg, 1), Offset));
+      BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+        .addCFIIndex(CFIIndex);
     }
   }
 
   // if framepointer enabled, set it to point to the stack pointer.
   if (hasFP(MF)) {
     // Insert instruction "move $fp, $sp" at this location.
-    BuildMI(MBB, MBBI, dl, TII.get(ADDu), FP).addReg(SP).addReg(ZERO);
+    BuildMI(MBB, MBBI, dl, TII.get(ADDu), FP).addReg(SP).addReg(ZERO)
+      .setMIFlag(MachineInstr::FrameSetup);
 
     // emit ".cfi_def_cfa_register $fp"
-    MCSymbol *SetFPLabel = MMI.getContext().CreateTempSymbol();
-    BuildMI(MBB, MBBI, dl,
-            TII.get(TargetOpcode::PROLOG_LABEL)).addSym(SetFPLabel);
-    DstML = MachineLocation(FP);
-    SrcML = MachineLocation(MachineLocation::VirtualFP);
-    MMI.addFrameInst(convertMoveToCFI(MRI, SetFPLabel, DstML, SrcML));
+    unsigned CFIIndex = MMI.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, MRI->getDwarfRegNum(FP, true)));
+    BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
+      .addCFIIndex(CFIIndex);
   }
 }
 
 void Nios2FrameLowering::emitEpilogue(MachineFunction &MF,
-                                       MachineBasicBlock &MBB) const {
+                                      MachineBasicBlock &MBB) const {
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   MachineFrameInfo *MFI            = MF.getFrameInfo();
   const Nios2InstrInfo &TII =
-    *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
+    *static_cast<const Nios2InstrInfo*>(MF.getSubtarget().getInstrInfo());
   DebugLoc dl = MBBI->getDebugLoc();
   unsigned SP = Nios2::SP;
   unsigned FP = Nios2::FP;
@@ -159,8 +156,6 @@ void Nios2FrameLowering::emitEpilogue(MachineFunction &MF,
   // Adjust stack.
   TII.adjustStackPtr(SP, StackSize, MBB, MBBI);
 }
-
-
 
 //===----------------------------------------------------------------------===//
 //
@@ -219,7 +214,7 @@ void Nios2FrameLowering::
 eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I) const {
   const Nios2InstrInfo &TII =
-    *static_cast<const Nios2InstrInfo*>(MF.getTarget().getInstrInfo());
+    *static_cast<const Nios2InstrInfo*>(MF.getSubtarget().getInstrInfo());
 
   if (!hasReservedCallFrame(MF)) {
     int64_t Amount = I->getOperand(0).getImm();

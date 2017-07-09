@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NIOS2REGISTERINFO_H
-#define NIOS2REGISTERINFO_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2REGISTERINFO_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2REGISTERINFO_H
 
 #include "Nios2.h"
 #include "llvm/Target/TargetRegisterInfo.h"
@@ -21,18 +21,9 @@
 #include "Nios2GenRegisterInfo.inc"
 
 namespace llvm {
-class Nios2Subtarget;
-class Nios2InstrInfo;
-class Type;
-
 class Nios2RegisterInfo : public Nios2GenRegisterInfo {
-protected:
-  const Nios2Subtarget &Subtarget;
-  const Nios2InstrInfo &TII;
-
 public:
-  Nios2RegisterInfo(const Nios2Subtarget &Subtarget,
-      const Nios2InstrInfo &I);
+  Nios2RegisterInfo();
 
   /// getRegisterNumbering - Given the enum value for some register, e.g.
   /// Nios2::RA, return the number that it corresponds to (e.g. 31).

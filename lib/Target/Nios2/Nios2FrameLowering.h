@@ -11,11 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NIOS2_FRAMEINFO_H
-#define NIOS2_FRAMEINFO_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2FRAMELOWERING_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2FRAMELOWERING_H
 
 #include "Nios2.h"
-#include "Nios2Subtarget.h"
 #include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
@@ -26,19 +25,21 @@ protected:
   const Nios2Subtarget &STI;
 
 public:
-  explicit Nios2FrameLowering(const Nios2Subtarget &sti)
-    : TargetFrameLowering(StackGrowsDown, 8, 0, 8), STI(sti) {}
+  explicit Nios2FrameLowering(const Nios2Subtarget &ST)
+    : TargetFrameLowering(StackGrowsDown, 8, 0, 8), STI(ST) {}
 
-  bool hasFP(const MachineFunction &MF) const;
+  static const Nios2FrameLowering *create(const Nios2Subtarget &ST);
 
-  virtual void eliminateCallFramePseudoInstr(MachineFunction &MF,
+  bool hasFP(const MachineFunction &MF) const override;
+
+  void eliminateCallFramePseudoInstr(MachineFunction &MF,
                                      MachineBasicBlock &MBB,
-                                     MachineBasicBlock::iterator I) const;
+                                     MachineBasicBlock::iterator I) const override;
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.
-  void emitPrologue(MachineFunction &MF) const;
-  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const;
+  void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
+  void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
 };
 
 } // End llvm namespace

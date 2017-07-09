@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NIOS2TARGETMACHINE_H
-#define NIOS2TARGETMACHINE_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2TARGETMACHINE_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2TARGETMACHINE_H
 
 #include "Nios2FrameLowering.h"
 #include "Nios2InstrInfo.h"
@@ -28,44 +28,28 @@ class formatted_raw_ostream;
 class Nios2RegisterInfo;
 
 class Nios2TargetMachine : public LLVMTargetMachine {
-  Nios2Subtarget       Subtarget;
-  const DataLayout    Layout; // Calculates type size & alignment
-  const Nios2InstrInfo *InstrInfo;
-  const Nios2FrameLowering *FrameLowering;
-  Nios2TargetLowering  TLInfo;
-  Nios2SelectionDAGInfo TSInfo;
+  std::unique_ptr<TargetLoweringObjectFile> TLOF;
+  Nios2Subtarget Subtarget;
 
 public:
-  Nios2TargetMachine(const Target &T, StringRef TT,
+  Nios2TargetMachine(const Target &T, const Triple &TT,
                     StringRef CPU, StringRef FS, const TargetOptions &Options,
                     Reloc::Model RM, CodeModel::Model CM,
                     CodeGenOpt::Level OL);
 
-  virtual ~Nios2TargetMachine() { delete InstrInfo; }
-
-  virtual const Nios2InstrInfo *getInstrInfo() const
-  { return InstrInfo; }
-  virtual const TargetFrameLowering *getFrameLowering() const
-  { return FrameLowering; }
-  virtual const Nios2Subtarget *getSubtargetImpl() const
-  { return &Subtarget; }
-  virtual const DataLayout *getDataLayout()    const
-  { return &Layout;}
-
-  virtual const Nios2RegisterInfo *getRegisterInfo()  const {
-    return &InstrInfo->getRegisterInfo();
-  }
-
-  virtual const Nios2TargetLowering *getTargetLowering() const {
-    return &TLInfo;
-  }
-
-  virtual const Nios2SelectionDAGInfo* getSelectionDAGInfo() const {
-    return &TSInfo;
+  ~Nios2TargetMachine() override { }
+  
+  const Nios2Subtarget *getSubtargetImpl() const { return &Subtarget; }
+  const Nios2Subtarget *getSubtargetImpl(const Function &F) const override {
+    return &Subtarget; 
   }
 
   // Pass Pipeline Configuration
-  virtual TargetPassConfig *createPassConfig(PassManagerBase &PM);
+  TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
+
+  TargetLoweringObjectFile *getObjFileLowering() const override {
+    return TLOF.get();
+  }
 };
 
 /// Nios2StdTargetMachine - Nios2 "standard" version
@@ -73,10 +57,10 @@ public:
 class Nios2StdTargetMachine : public Nios2TargetMachine {
   virtual void anchor();
 public:
-  Nios2StdTargetMachine(const Target &T, StringRef TT,
-                      StringRef CPU, StringRef FS, const TargetOptions &Options,
-                      Reloc::Model RM, CodeModel::Model CM,
-                      CodeGenOpt::Level OL);
+  Nios2StdTargetMachine(const Target &T, const Triple &TT,
+                        StringRef CPU, StringRef FS, const TargetOptions &Options,
+                        Reloc::Model RM, CodeModel::Model CM,
+                        CodeGenOpt::Level OL);
 };
 
 

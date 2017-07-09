@@ -23,6 +23,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 
+using namespace llvm;
+
 #define GET_INSTRINFO_MC_DESC
 #include "Nios2GenInstrInfo.inc"
 
@@ -32,28 +34,25 @@
 #define GET_REGINFO_MC_DESC
 #include "Nios2GenRegisterInfo.inc"
 
-using namespace llvm;
-
 static MCInstrInfo *createNios2MCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
   InitNios2MCInstrInfo(X);
   return X;
 }
 
-static MCRegisterInfo *createNios2MCRegisterInfo(StringRef TT) {
+static MCRegisterInfo *createNios2MCRegisterInfo(const Triple &TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
   InitNios2MCRegisterInfo(X, Nios2::RA, 0, 0, Nios2::PC);
   return X;
 }
 
-static MCSubtargetInfo *createNios2MCSubtargetInfo(StringRef TT, StringRef CPU,
-                                                  StringRef FS) {
-  MCSubtargetInfo *X = new MCSubtargetInfo();
-  InitNios2MCSubtargetInfo(X, TT, CPU, "");
-  return X;
+static MCSubtargetInfo *createNios2MCSubtargetInfo(const Triple &TT, 
+                                                   StringRef CPU,
+                                                   StringRef FS) {
+  return createNios2MCSubtargetInfoImpl(TT, CPU, FS);
 }
 
-static MCAsmInfo *createNios2MCAsmInfo(const MCRegisterInfo &MRI, StringRef TT) {
+static MCAsmInfo *createNios2MCAsmInfo(const MCRegisterInfo &MRI, const Triple &TT) {
   MCAsmInfo *MAI = new Nios2MCAsmInfo(TT);
 
   unsigned SP = MRI.getDwarfRegNum(Nios2::SP, true);
@@ -63,24 +62,23 @@ static MCAsmInfo *createNios2MCAsmInfo(const MCRegisterInfo &MRI, StringRef TT) 
   return MAI;
 }
 
-static MCCodeGenInfo *createNios2MCCodeGenInfo(StringRef TT, Reloc::Model RM,
-                                              CodeModel::Model CM,
-                                              CodeGenOpt::Level OL) {
+static MCCodeGenInfo *createNios2MCCodeGenInfo(const Triple &TT, Reloc::Model RM,
+                                               CodeModel::Model CM,
+                                               CodeGenOpt::Level OL) {
   MCCodeGenInfo *X = new MCCodeGenInfo();
   //if (CM == CodeModel::JITDefault)
   //  RM = Reloc::Static;
   //else if (RM == Reloc::Default)
   //  RM = Reloc::PIC_;
-  X->InitMCCodeGenInfo(RM, CM, OL);
+  X->initMCCodeGenInfo(RM, CM, OL);
   return X;
 }
 
-static MCInstPrinter *createNios2MCInstPrinter(const Target &T,
-                                              unsigned SyntaxVariant,
-                                              const MCAsmInfo &MAI,
-                                              const MCInstrInfo &MII,
-                                              const MCRegisterInfo &MRI,
-                                              const MCSubtargetInfo &STI) {
+static MCInstPrinter *createNios2MCInstPrinter(const Triple &T,
+                                               unsigned SyntaxVariant,
+                                               const MCAsmInfo &MAI,
+                                               const MCInstrInfo &MII,
+                                               const MCRegisterInfo &MRI) {
   return new Nios2InstPrinter(MAI, MII, MRI);
 }
 

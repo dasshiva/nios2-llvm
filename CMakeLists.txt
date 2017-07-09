@@ -211,6 +211,7 @@ set(LLVM_ALL_TARGETS
   Mips
   MSP430
   NVPTX
+  Nios2
   PowerPC
   Sparc
   SystemZ

@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "asm-printer"
 #include "Nios2InstPrinter.h"
 #include "Nios2InstrInfo.h"
 #include "llvm/ADT/StringExtras.h"
@@ -22,6 +21,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
+
+#define DEBUG_TYPE "asm-printer"
 
 #include "Nios2GenAsmWriter.inc"
 
@@ -68,7 +69,7 @@ void Nios2InstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
 }
 
 void Nios2InstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                                StringRef Annot) {
+                                StringRef Annot, const MCSubtargetInfo &STI) {
   //switch (MI->getOpcode()) {
   //default:
   //  break;

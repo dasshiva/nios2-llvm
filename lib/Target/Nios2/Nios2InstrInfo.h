@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NIOS2INSTRUCTIONINFO_H
-#define NIOS2INSTRUCTIONINFO_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2INSTRINFO_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2INSTRINFO_H
 
 #include "Nios2.h"
 #include "Nios2RegisterInfo.h"
@@ -23,15 +23,23 @@
 #include "Nios2GenInstrInfo.inc"
 
 namespace llvm {
+class Nios2Subtarget;
 
 class Nios2InstrInfo : public Nios2GenInstrInfo {
+  virtual void anchor();
 protected:
-  Nios2TargetMachine &TM;
-  const Nios2RegisterInfo RI;
   unsigned UncondBrOpc;
+  const Nios2Subtarget &Subtarget;
+  const Nios2RegisterInfo RI;
 
 public:
-  explicit Nios2InstrInfo(Nios2TargetMachine &TM);
+  explicit Nios2InstrInfo(const Nios2Subtarget &STI);
+
+  /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
+  /// such, whenever a client has an instance of instruction info, it should
+  /// always be able to get register info as well (through this method).
+  ///
+  const Nios2RegisterInfo &getRegisterInfo() const { return RI; }
 
   virtual void storeRegToStackSlot(MachineBasicBlock &MBB,
                                    MachineBasicBlock::iterator MBBI,
@@ -84,7 +92,7 @@ public:
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
   ///
-  virtual const Nios2RegisterInfo &getRegisterInfo() const;
+  //const Nios2RegisterInfo &getRegisterInfo() const { return RI; }
 
   virtual unsigned GetOppositeBranchOpc(unsigned Opc) const;
 

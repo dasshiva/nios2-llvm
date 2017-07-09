@@ -23,8 +23,6 @@ namespace llvm {
   class FunctionPass;
 
   FunctionPass *createNios2ISelDag(Nios2TargetMachine &TM);
-  FunctionPass *createNios2JITCodeEmitterPass(Nios2TargetMachine &TM,
-                                                 JITCodeEmitter &JCE);
 } // end namespace llvm;
 
 #endif

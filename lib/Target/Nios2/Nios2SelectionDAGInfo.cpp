@@ -11,13 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "nios2-selectiondag-info"
 #include "Nios2TargetMachine.h"
-using namespace llvm;
+#include "Nios2TargetObjectFile.h"
 
-Nios2SelectionDAGInfo::Nios2SelectionDAGInfo(const Nios2TargetMachine &TM)
-  : TargetSelectionDAGInfo(TM) {
-}
-
-Nios2SelectionDAGInfo::~Nios2SelectionDAGInfo() {
-}

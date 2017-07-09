@@ -15,8 +15,9 @@
 #include "Nios2.h"
 #include "Nios2FrameLowering.h"
 #include "Nios2InstrInfo.h"
-#include "llvm/PassManager.h"
+#include "Nios2TargetObjectFile.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
@@ -26,29 +27,24 @@ extern "C" void LLVMInitializeNios2Target() {
 }
 
 Nios2TargetMachine::
-Nios2TargetMachine(const Target &T, StringRef TT,
-                  StringRef CPU, StringRef FS, const TargetOptions &Options,
-                  Reloc::Model RM, CodeModel::Model CM,
-                  CodeGenOpt::Level OL)
-  : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
-    Subtarget(TT, CPU, FS, Options),
-    Layout("e-p:32:32:32-i8:8:32-i16:16:32-n32"),
-    InstrInfo(new Nios2InstrInfo(*this)),
-    FrameLowering(new Nios2FrameLowering(Subtarget)),
-    TLInfo(*this), TSInfo(*this)  {
+Nios2TargetMachine(const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
+                   const TargetOptions &Options, Reloc::Model RM,
+                   CodeModel::Model CM, CodeGenOpt::Level OL)
+  : LLVMTargetMachine(T, "e-p:32:32:32-i8:8:32-i16:16:32-n32", TT,
+                      CPU, FS, Options, RM, CM, OL),
+    TLOF(make_unique<Nios2TargetObjectFile>()),
+    Subtarget(TargetTriple, CPU, FS, *this) {
+  
   initAsmInfo();
-  // Don't emit cfi directives, nios2-gcc doesn't support them
-  setMCUseLoc(false);
-  setMCUseCFI(false);
 }
 
 void Nios2StdTargetMachine::anchor() { }
 
 Nios2StdTargetMachine::
-Nios2StdTargetMachine(const Target &T, StringRef TT,
-                    StringRef CPU, StringRef FS, const TargetOptions &Options,
-                    Reloc::Model RM, CodeModel::Model CM,
-                    CodeGenOpt::Level OL)
+Nios2StdTargetMachine(const Target &T, const Triple &TT,
+                      StringRef CPU, StringRef FS, const TargetOptions &Options,
+                      Reloc::Model RM, CodeModel::Model CM,
+                      CodeGenOpt::Level OL)
   : Nios2TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL) {
 }
 
@@ -67,7 +63,7 @@ public:
     return *getNios2TargetMachine().getSubtargetImpl();
   }
 
-  virtual bool addInstSelector();
+  bool addInstSelector() override;
 };
 } // namespace
 

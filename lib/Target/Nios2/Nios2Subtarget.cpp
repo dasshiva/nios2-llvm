@@ -19,22 +19,21 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/TargetRegistry.h"
 
+using namespace llvm;
+
+#define DEBUG_TYPE "nios2-subtarget"
+
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "Nios2GenSubtargetInfo.inc"
 
-using namespace llvm;
+Nios2Subtarget::Nios2Subtarget(const Triple &TT, const std::string &CPU,
+                               const std::string &FS, const Nios2TargetMachine &TM)
+  : Nios2GenSubtargetInfo(TT, CPU, FS), TargetTriple(TT),
+    Nios2ArchVersion(Nios2Std), Nios2ABI(UnknownABI),
+    InstrInfo(*this),
+    FrameLowering(*this), TLInfo(TM, *this) {
 
-void Nios2Subtarget::anchor() { }
-
-Nios2Subtarget::Nios2Subtarget(const std::string &TT, const std::string &CPU,
-                             const std::string &FS, const TargetOptions &Options) :
-  Nios2GenSubtargetInfo(TT, CPU, FS),
-  Nios2ArchVersion(Nios2Std),
-  Nios2ABI(UnknownABI),
-  TargetTriple(TT),
-  Options(Options)
-{
   initializeEnvironment();
   resetSubtargetFeatures(CPU, FS);
 }
@@ -83,12 +82,15 @@ void Nios2Subtarget::initializeEnvironment() {
   HasHWDiv = false;
 }
 
-bool
-Nios2Subtarget::enablePostRAScheduler(CodeGenOpt::Level OptLevel,
-                                    TargetSubtargetInfo::AntiDepBreakMode &Mode,
-                                     RegClassVector &CriticalPathRCs) const {
-  Mode = TargetSubtargetInfo::ANTIDEP_NONE;
+void Nios2Subtarget::getCriticalPathRCs(RegClassVector &CriticalPathRCs) const {
   CriticalPathRCs.clear();
   CriticalPathRCs.push_back(&Nios2::CPURegsRegClass);
-  return OptLevel >= CodeGenOpt::Aggressive;
+}
+
+bool Nios2Subtarget::enablePostRAScheduler() const {
+  return true;
+}
+
+CodeGenOpt::Level Nios2Subtarget::getOptLevelToEnablePostRAScheduler() const {
+  return CodeGenOpt::Aggressive;
 }

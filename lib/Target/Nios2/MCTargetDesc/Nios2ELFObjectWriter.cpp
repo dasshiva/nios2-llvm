@@ -34,33 +34,36 @@ namespace {
 
   class Nios2ELFObjectWriter : public MCELFObjectTargetWriter {
   public:
-    Nios2ELFObjectWriter(bool _is64Bit, uint8_t OSABI,
-                        bool _isN64, bool IsLittleEndian);
+    Nios2ELFObjectWriter(bool _is64Bit, uint8_t OSABI, bool IsLittleEndian);
 
-    virtual ~Nios2ELFObjectWriter();
+    ~Nios2ELFObjectWriter() override;
 
-    virtual unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
-                                  bool IsPCRel, bool IsRelocWithSymbol,
-                                  int64_t Addend) const;
-    virtual unsigned getEFlags() const;
-    virtual const MCSymbol *ExplicitRelSym(const MCAssembler &Asm,
-                                           const MCValue &Target,
-                                           const MCFragment &F,
-                                           const MCFixup &Fixup,
-                                           bool IsPCRel) const;
-    virtual void sortRelocs(const MCAssembler &Asm,
-                            std::vector<ELFRelocationEntry> &Relocs);
+    unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
+                          bool IsPCRel) const override;
+
+    // TODO
+    //const MCSymbol *ExplicitRelSym(const MCAssembler &Asm,
+    //                               const MCValue &Target,
+    //                               const MCFragment &F,
+    //                               const MCFixup &Fixup,
+    //                               bool IsPCRel) const;
+
+    //bool needsRelocateWithSymbol(const MCSymbol &Sym,
+    //                             unsigned Type) const override;
+
+    void sortRelocs(const MCAssembler &Asm,
+                    std::vector<ELFRelocationEntry> &Relocs) override;
   };
 }
 
 Nios2ELFObjectWriter::Nios2ELFObjectWriter(bool _is64Bit, uint8_t OSABI,
-                                         bool _isN64, bool IsLittleEndian)
+                                           bool IsLittleEndian)
   : MCELFObjectTargetWriter(_is64Bit, OSABI, ELF::EM_ALTERA_NIOS2,
-                            /*HasRelocationAddend*/ (_isN64) ? true : false,
-                            /*IsN64*/ _isN64) {}
+                            /*HasRelocationAddend*/ false) {}
 
 Nios2ELFObjectWriter::~Nios2ELFObjectWriter() {}
 
+#if 0 // TODO
 // FIXME: get the real EABI Version from the Subtarget class.
 unsigned Nios2ELFObjectWriter::getEFlags() const {
 
@@ -88,16 +91,16 @@ const MCSymbol *Nios2ELFObjectWriter::ExplicitRelSym(const MCAssembler &Asm,
 
   return NULL;
 }
+#endif
 
 unsigned Nios2ELFObjectWriter::GetRelocType(const MCValue &Target,
-                                           const MCFixup &Fixup,
-                                           bool IsPCRel,
-                                           bool IsRelocWithSymbol,
-                                           int64_t Addend) const {
+                                            const MCFixup &Fixup,
+                                            bool IsPCRel) const {
   // determine the type of the relocation
   unsigned Type = (unsigned)ELF::R_MIPS_NONE;
   unsigned Kind = (unsigned)Fixup.getKind();
 
+#if 0 // NYI
   switch (Kind) {
   default:
     llvm_unreachable("invalid fixup kind!");
@@ -198,9 +201,12 @@ unsigned Nios2ELFObjectWriter::GetRelocType(const MCValue &Target,
     Type = ELF::R_MIPS_CALL_LO16;
     break;
   }
+#endif
+
   return Type;
 }
 
+#if 0 // NYI
 // Return true if R is either a GOT16 against a local symbol or HI16.
 static bool NeedsMatchingLo(const MCAssembler &Asm, const RelEntry &R) {
   if (!R.Sym)
@@ -229,9 +235,11 @@ static bool HasSameSymbol(const RelEntry &R0, const RelEntry &R1) {
 static int CompareOffset(const RelEntry &R0, const RelEntry &R1) {
   return (R0.Offset > R1.Offset) ? 1 : ((R0.Offset == R1.Offset) ? 0 : -1);
 }
+#endif
 
 void Nios2ELFObjectWriter::sortRelocs(const MCAssembler &Asm,
-                                     std::vector<ELFRelocationEntry> &Relocs) {
+                                      std::vector<ELFRelocationEntry> &Relocs) {
+#if 0 // NYI
   // Call the default function first. Relocations are sorted in descending
   // order of r_offset.
   MCELFObjectTargetWriter::sortRelocs(Asm, Relocs);
@@ -286,14 +294,14 @@ void Nios2ELFObjectWriter::sortRelocs(const MCAssembler &Asm,
 
   for (RelLsIter R = RelocLs.begin(); R != RelocLs.end(); ++R)
     Relocs[--I] = R->Reloc;
+#endif
 }
 
-MCObjectWriter *llvm::createNios2ELFObjectWriter(raw_ostream &OS,
-                                                uint8_t OSABI,
-                                                bool IsLittleEndian,
-                                                bool Is64Bit) {
-  MCELFObjectTargetWriter *MOTW = new Nios2ELFObjectWriter(Is64Bit, OSABI,
-                                                (Is64Bit) ? true : false,
-                                                IsLittleEndian);
+MCObjectWriter *llvm::createNios2ELFObjectWriter(raw_pwrite_stream &OS,
+                                                 uint8_t OSABI,
+                                                 bool IsLittleEndian,
+                                                 bool Is64Bit) {
+  MCELFObjectTargetWriter *MOTW = 
+    new Nios2ELFObjectWriter(Is64Bit, OSABI, IsLittleEndian);
   return createELFObjectWriter(MOTW, OS, IsLittleEndian);
 }

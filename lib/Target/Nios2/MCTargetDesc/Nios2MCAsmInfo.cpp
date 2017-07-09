@@ -18,7 +18,7 @@ using namespace llvm;
 
 void Nios2MCAsmInfo::anchor() { }
 
-Nios2MCAsmInfo::Nios2MCAsmInfo(StringRef TT) {
+Nios2MCAsmInfo::Nios2MCAsmInfo(const Triple &TT) {
   IsLittleEndian = true;
 
   AlignmentIsInBytes          = false;
@@ -32,12 +32,11 @@ Nios2MCAsmInfo::Nios2MCAsmInfo(StringRef TT) {
   GPRel64Directive            = "\t.gpdword\t";
   WeakRefDirective            = "\t.weak\t";
   //GlobalPrefix                = "\t.global\t";
-  GlobalDirective                = "\t.global\t";
+  GlobalDirective             = "\t.global\t";
   AscizDirective              = "\t.string\t";
   HasIdentDirective           = true;
   UsesELFSectionDirectiveForBSS = true;
 
   SupportsDebugInformation = true;
   ExceptionsType = ExceptionHandling::DwarfCFI;
-  HasLEB128 = true;
 }
