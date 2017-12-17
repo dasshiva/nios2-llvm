@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NIOS2MCINSTLOWER_H
-#define NIOS2MCINSTLOWER_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2MCINSTLOWER_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2MCINSTLOWER_H
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/Support/Compiler.h"

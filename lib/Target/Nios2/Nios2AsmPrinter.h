@@ -38,10 +38,9 @@ public:
   const Nios2FunctionInfo *Nios2FI;
   Nios2MCInstLower MCInstLowering;
 
-  explicit Nios2AsmPrinter(TargetMachine &TM,  MCStreamer &Streamer)
-    : AsmPrinter(TM, Streamer), MCInstLowering(*this) {
-    Subtarget = &TM.getSubtarget<Nios2Subtarget>();
-  }
+  explicit Nios2AsmPrinter(TargetMachine &TM, 
+                           std::unique_ptr<MCStreamer> &Streamer)
+    : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {}
 
   virtual const char *getPassName() const {
     return "Nios2 Assembly Printer";

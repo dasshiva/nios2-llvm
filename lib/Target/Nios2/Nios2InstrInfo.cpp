@@ -14,23 +14,25 @@
 #include "Nios2InstrInfo.h"
 #include "Nios2TargetMachine.h"
 #include "Nios2MachineFunction.h"
+#include "Nios2TargetObjectFile.h"
 #include "InstPrinter/Nios2InstPrinter.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
-#include "llvm/ADT/STLExtras.h"
+
+using namespace llvm;
 
 #define GET_INSTRINFO_CTOR_DTOR
 #include "Nios2GenInstrInfo.inc"
 
-using namespace llvm;
+// Pin the vtable to this file.
+void Nios2InstrInfo::anchor() {}
 
-Nios2InstrInfo::Nios2InstrInfo(Nios2TargetMachine &tm)
+Nios2InstrInfo::Nios2InstrInfo(const Nios2Subtarget &STI)
   : Nios2GenInstrInfo(Nios2::ADJCALLSTACKDOWN, Nios2::ADJCALLSTACKUP),
-    TM(tm),
-    RI(*tm.getSubtargetImpl(), *this),
-    UncondBrOpc(Nios2::BR) {}
+    Subtarget(STI), UncondBrOpc(Nios2::BR), RI() {}
 
 bool Nios2InstrInfo::isZeroImm(const MachineOperand &op) const {
   return op.isImm() && op.getImm() == 0;
@@ -39,8 +41,7 @@ bool Nios2InstrInfo::isZeroImm(const MachineOperand &op) const {
 /// insertNoop - If data hazard condition is found insert the target nop
 /// instruction.
 void Nios2InstrInfo::
-insertNoop(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI) const
-{
+insertNoop(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI) const {
   DebugLoc DL;
   unsigned ZEROReg = Nios2::ZERO;
   // NOP expansion
@@ -54,7 +55,7 @@ MachineMemOperand *Nios2InstrInfo::GetMemOperand(MachineBasicBlock &MBB, int FI,
   MachineFrameInfo &MFI = *MF.getFrameInfo();
   unsigned Align = MFI.getObjectAlignment(FI);
 
-  return MF.getMachineMemOperand(MachinePointerInfo::getFixedStack(FI), Flag,
+  return MF.getMachineMemOperand(MachinePointerInfo::getFixedStack(MF, FI), Flag,
                                  MFI.getObjectSize(FI), Align);
 }
 
@@ -174,10 +175,9 @@ bool Nios2InstrInfo::AnalyzeBranch(MachineBasicBlock &MBB,
   return false;
 }
 
-void Nios2InstrInfo::BuildCondBr(MachineBasicBlock &MBB,
-                                MachineBasicBlock *TBB, DebugLoc DL,
-                                const SmallVectorImpl<MachineOperand>& Cond)
-  const {
+void 
+Nios2InstrInfo::BuildCondBr(MachineBasicBlock &MBB, MachineBasicBlock *TBB, 
+                            DebugLoc DL, ArrayRef<MachineOperand> Cond) const {
   unsigned Opc = Cond[0].getImm();
   const MCInstrDesc &MCID = get(Opc);
   MachineInstrBuilder MIB = BuildMI(&MBB, DL, MCID);
@@ -196,8 +196,7 @@ void Nios2InstrInfo::BuildCondBr(MachineBasicBlock &MBB,
 unsigned Nios2InstrInfo::
 InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
              MachineBasicBlock *FBB,
-             const SmallVectorImpl<MachineOperand> &Cond,
-             DebugLoc DL) const {
+             ArrayRef<MachineOperand> Cond, DebugLoc DL) const {
   // Shouldn't be a fall through.
   assert(TBB && "InsertBranch must not be told to insert a fallthrough");
 
@@ -225,9 +224,7 @@ InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
   return 1;
 }
 
-unsigned Nios2InstrInfo::
-RemoveBranch(MachineBasicBlock &MBB) const
-{
+unsigned Nios2InstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   MachineBasicBlock::reverse_iterator I = MBB.rbegin(), REnd = MBB.rend();
   MachineBasicBlock::reverse_iterator FirstBr;
   unsigned removed;
@@ -399,7 +396,4 @@ void Nios2InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     MIB.addReg(ZeroReg);
 }
 
-const Nios2RegisterInfo &Nios2InstrInfo::getRegisterInfo() const {
-  return RI;
-}
 

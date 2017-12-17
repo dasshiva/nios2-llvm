@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "nios2-lower"
 #include "Nios2ISelLowering.h"
 #include "Nios2MachineFunction.h"
 #include "Nios2TargetMachine.h"
@@ -38,6 +37,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "nios2-lower"
 
 // If I is a shifted mask, set the size (Size) and the first bit of the
 // mask (Pos), and return true.
@@ -69,10 +70,9 @@ const char *Nios2TargetLowering::getTargetNodeName(unsigned Opcode) const {
   }
 }
 
-Nios2TargetLowering::
-Nios2TargetLowering(Nios2TargetMachine &TM)
-  : TargetLowering(TM, new TargetLoweringObjectFileELF()),
-    Subtarget(&TM.getSubtarget<Nios2Subtarget>()) {
+Nios2TargetLowering::Nios2TargetLowering(const Nios2TargetMachine &TM, 
+                                         const Nios2Subtarget &STI)
+  : TargetLowering(TM), Subtarget(STI) {
 
   // Nios2 does not have i1 type, so use i32 for
   // setcc operations results (slt, sgt, ...).
@@ -83,9 +83,11 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   addRegisterClass(MVT::i32, &Nios2::CPURegsRegClass);
 
   // Load extented operations for i1 types must be promoted
-  setLoadExtAction(ISD::EXTLOAD,  MVT::i1,  Promote);
-  setLoadExtAction(ISD::ZEXTLOAD, MVT::i1,  Promote);
-  setLoadExtAction(ISD::SEXTLOAD, MVT::i1,  Promote);
+  for (MVT VT : MVT::integer_valuetypes()) {
+    setLoadExtAction(ISD::EXTLOAD, VT, MVT::i1, Promote);
+    setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
+    setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
+  }
 
   // Used by legalize types to correctly generate the setcc result.
   // Without this, every float setcc comes with a AND/OR with the result,
@@ -151,16 +153,12 @@ Nios2TargetLowering(Nios2TargetMachine &TM)
   setMinFunctionAlignment(2);
 
   setStackPointerRegisterToSaveRestore(Nios2::SP);
-  computeRegisterProperties();
+  computeRegisterProperties(Subtarget.getRegisterInfo());
 
-  setExceptionPointerRegister(Nios2::EA);
+  //setExceptionPointerRegister(Nios2::EA);
   //setExceptionSelectorRegister(Nios2::R1);
  
   setOperationAction(ISD::TRAP, MVT::Other, Legal);
-
-  // Do not generate indirect jump for the moment
-  // TODO: Custom lower JumpTable nodes and generate jumpi instructions
-  setSupportJumpTables(false);
 
   MaxStoresPerMemcpy = 16;
 }
@@ -177,8 +175,9 @@ bool Nios2TargetLowering::allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) cons
   }
 }
 
-EVT Nios2TargetLowering::getSetCCResultType(LLVMContext &Context,
-    EVT VT) const {
+EVT Nios2TargetLowering::getSetCCResultType(const DataLayout &DL, 
+                                            LLVMContext &Context,
+                                            EVT VT) const {
   return MVT::i32;
 }
 
@@ -349,22 +348,22 @@ SDValue Nios2TargetLowering::lowerShiftLeftParts(SDValue Op,
   //  lo = 0
   //  hi = (shl lo, shamt[4:0])
   SDValue Not = DAG.getNode(ISD::XOR, DL, MVT::i32, Shamt,
-                            DAG.getConstant(-1, MVT::i32));
+                            DAG.getConstant(-1, DL, MVT::i32));
   SDValue ShiftRight1Lo = DAG.getNode(ISD::SRL, DL, MVT::i32, Lo,
-                                      DAG.getConstant(1, MVT::i32));
+                                      DAG.getConstant(1, DL, MVT::i32));
   SDValue ShiftRightLo = DAG.getNode(ISD::SRL, DL, MVT::i32, ShiftRight1Lo,
                                      Not);
   SDValue ShiftLeftHi = DAG.getNode(ISD::SHL, DL, MVT::i32, Hi, Shamt);
   SDValue Or = DAG.getNode(ISD::OR, DL, MVT::i32, ShiftLeftHi, ShiftRightLo);
   SDValue ShiftLeftLo = DAG.getNode(ISD::SHL, DL, MVT::i32, Lo, Shamt);
   SDValue Cond = DAG.getNode(ISD::AND, DL, MVT::i32, Shamt,
-                             DAG.getConstant(0x20, MVT::i32));
+                             DAG.getConstant(0x20, DL, MVT::i32));
   Lo = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond,
-                   DAG.getConstant(0, MVT::i32), ShiftLeftLo);
+                   DAG.getConstant(0, DL, MVT::i32), ShiftLeftLo);
   Hi = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond, ShiftLeftLo, Or);
 
   SDValue Ops[2] = {Lo, Hi};
-  return DAG.getMergeValues(Ops, 2, DL);
+  return DAG.getMergeValues(Ops, DL);
 }
 
 SDValue Nios2TargetLowering::lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
@@ -387,25 +386,25 @@ SDValue Nios2TargetLowering::lowerShiftRightParts(SDValue Op, SelectionDAG &DAG,
   //   lo = (srl hi, shamt[4:0])
   //   hi = 0
   SDValue Not = DAG.getNode(ISD::XOR, DL, MVT::i32, Shamt,
-                            DAG.getConstant(-1, MVT::i32));
+                            DAG.getConstant(-1, DL, MVT::i32));
   SDValue ShiftLeft1Hi = DAG.getNode(ISD::SHL, DL, MVT::i32, Hi,
-                                     DAG.getConstant(1, MVT::i32));
+                                     DAG.getConstant(1, DL, MVT::i32));
   SDValue ShiftLeftHi = DAG.getNode(ISD::SHL, DL, MVT::i32, ShiftLeft1Hi, Not);
   SDValue ShiftRightLo = DAG.getNode(ISD::SRL, DL, MVT::i32, Lo, Shamt);
   SDValue Or = DAG.getNode(ISD::OR, DL, MVT::i32, ShiftLeftHi, ShiftRightLo);
   SDValue ShiftRightHi = DAG.getNode(IsSRA ? ISD::SRA : ISD::SRL, DL, MVT::i32,
                                      Hi, Shamt);
   SDValue Cond = DAG.getNode(ISD::AND, DL, MVT::i32, Shamt,
-                             DAG.getConstant(0x20, MVT::i32));
+                             DAG.getConstant(0x20, DL, MVT::i32));
   SDValue Shift31 = DAG.getNode(ISD::SRA, DL, MVT::i32, Hi,
-                                DAG.getConstant(31, MVT::i32));
+                                DAG.getConstant(31, DL, MVT::i32));
   Lo = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond, ShiftRightHi, Or);
   Hi = DAG.getNode(ISD::SELECT, DL, MVT::i32, Cond,
-                   IsSRA ? Shift31 : DAG.getConstant(0, MVT::i32),
+                   IsSRA ? Shift31 : DAG.getConstant(0, DL, MVT::i32),
                    ShiftRightHi);
 
   SDValue Ops[2] = {Lo, Hi};
-  return DAG.getMergeValues(Ops, 2, DL);
+  return DAG.getMergeValues(Ops, DL);
 }
 
 SDValue Nios2TargetLowering::lowerSELECT_CC(SDValue Op,
@@ -427,7 +426,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
   {
     //case ISD::BRCOND:             return LowerBRCOND(Op, DAG);
     case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-    case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
+    case ISD::GlobalAddress:      return lowerGlobalAddress(Op, DAG);
     case ISD::SHL_PARTS:          return lowerShiftLeftParts(Op, DAG);
     case ISD::SRA_PARTS:          return lowerShiftRightParts(Op, DAG, true);
     case ISD::SRL_PARTS:          return lowerShiftRightParts(Op, DAG, false);
@@ -454,7 +453,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const
 // MachineFunction as a live in value.  It also creates a corresponding
 // virtual register for it.
 static unsigned
-AddLiveIn(MachineFunction &MF, unsigned PReg, const TargetRegisterClass *RC)
+addLiveIn(MachineFunction &MF, unsigned PReg, const TargetRegisterClass *RC)
 {
   assert(RC->contains(PReg) && "Not the correct regclass!");
   unsigned VReg = MF.getRegInfo().createVirtualRegister(RC);
@@ -462,20 +461,18 @@ AddLiveIn(MachineFunction &MF, unsigned PReg, const TargetRegisterClass *RC)
   return VReg;
 }
 
-SDValue Nios2TargetLowering::LowerGlobalAddress(SDValue Op,
+SDValue Nios2TargetLowering::lowerGlobalAddress(SDValue Op,
                                                SelectionDAG &DAG) const {
   // FIXME there isn't actually debug info here
   SDLoc dl(Op);
   const GlobalValue *GV = cast<GlobalAddressSDNode>(Op)->getGlobal();
-
-  SDVTList VTs = DAG.getVTList(MVT::i32);
 
   // %hi/%lo relocation
   SDValue GAHi = DAG.getTargetGlobalAddress(GV, dl, MVT::i32, 0,
                                             Nios2II::MO_HIADJ16);
   SDValue GALo = DAG.getTargetGlobalAddress(GV, dl, MVT::i32, 0,
                                             Nios2II::MO_LO16);
-  SDValue HiPart = DAG.getNode(Nios2ISD::Hi, dl, VTs, &GAHi, 1);
+  SDValue HiPart = DAG.getNode(Nios2ISD::Hi, dl, MVT::i32, GAHi);
   SDValue Lo = DAG.getNode(Nios2ISD::Lo, dl, MVT::i32, GALo);
   return DAG.getNode(ISD::ADD, dl, MVT::i32, HiPart, Lo);
 }
@@ -653,7 +650,7 @@ LowerConstantPool(SDValue Op, SelectionDAG &DAG) const
                                            N->getOffset(), GOTFlag);
     CP = DAG.getNode(Nios2ISD::Wrapper, dl, ValTy, GetGlobalReg(DAG, ValTy), CP);
     SDValue Load = DAG.getLoad(ValTy, dl, DAG.getEntryNode(), CP,
-                               MachinePointerInfo::getConstantPool(), false,
+                               MachinePointerInfo::getConstantPool(DAG.getMachineFunction()), false,
                                false, false, 0);
     SDValue CPLo = DAG.getTargetConstantPool(C, ValTy, N->getAlignment(),
                                              N->getOffset(), OFSTFlag);
@@ -670,7 +667,7 @@ SDValue Nios2TargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
 
   SDLoc dl(Op);
   SDValue FI = DAG.getFrameIndex(FuncInfo->getVarArgsFrameIndex(),
-                                 getPointerTy());
+                                 getPointerTy(DAG.getDataLayout()));
 
   // vastart just stores the address of the VarArgsFrameIndex slot into the
   // memory location argument.
@@ -1062,7 +1059,7 @@ SDValue Nios2TargetLowering::LowerATOMIC_FENCE(SDValue Op,
 
 static const unsigned O32IntRegsSize = 4;
 
-static const uint16_t O32IntRegs[] = {
+static const ArrayRef<MCPhysReg> O32IntRegs = {
   Nios2::R4, Nios2::R5, Nios2::R6, Nios2::R7
 };
 
@@ -1085,7 +1082,7 @@ WriteByValArg(SDValue Chain, SDLoc dl,
   for (; RemainingSize >= 4 && LocMemOffset < 4 * 4;
        Offset += 4, RemainingSize -= 4, LocMemOffset += 4) {
     SDValue LoadPtr = DAG.getNode(ISD::ADD, dl, MVT::i32, Arg,
-                                  DAG.getConstant(Offset, MVT::i32));
+                                  DAG.getConstant(Offset, dl, MVT::i32));
     SDValue LoadVal = DAG.getLoad(MVT::i32, dl, Chain, LoadPtr,
                                   MachinePointerInfo(), false, false, false,
                                   std::min(ByValAlign, (unsigned )4));
@@ -1104,19 +1101,19 @@ WriteByValArg(SDValue Chain, SDLoc dl,
            "There must be one to three bytes remaining.");
     unsigned LoadSize = (RemainingSize == 3 ? 2 : RemainingSize);
     SDValue LoadPtr = DAG.getNode(ISD::ADD, dl, MVT::i32, Arg,
-                                  DAG.getConstant(Offset, MVT::i32));
+                                  DAG.getConstant(Offset, dl, MVT::i32));
     unsigned Alignment = std::min(ByValAlign, (unsigned )4);
     SDValue LoadVal = DAG.getExtLoad(ISD::ZEXTLOAD, dl, MVT::i32, Chain,
                                      LoadPtr, MachinePointerInfo(),
                                      MVT::getIntegerVT(LoadSize * 8), false,
-                                     false, Alignment);
+                                     false, false, Alignment);
     MemOpChains.push_back(LoadVal.getValue(1));
 
     // If target is big endian, shift it to the most significant half-word or
     // byte.
     if (!isLittle)
       LoadVal = DAG.getNode(ISD::SHL, dl, MVT::i32, LoadVal,
-                            DAG.getConstant(32 - LoadSize * 8, MVT::i32));
+                            DAG.getConstant(32 - LoadSize * 8, dl, MVT::i32));
 
     Offset += LoadSize;
     RemainingSize -= LoadSize;
@@ -1125,17 +1122,17 @@ WriteByValArg(SDValue Chain, SDLoc dl,
     if (RemainingSize != 0)  {
       assert(RemainingSize == 1 && "There must be one byte remaining.");
       LoadPtr = DAG.getNode(ISD::ADD, dl, MVT::i32, Arg,
-                            DAG.getConstant(Offset, MVT::i32));
+                            DAG.getConstant(Offset, dl, MVT::i32));
       unsigned Alignment = std::min(ByValAlign, (unsigned )2);
       SDValue Subword = DAG.getExtLoad(ISD::ZEXTLOAD, dl, MVT::i32, Chain,
                                        LoadPtr, MachinePointerInfo(),
-                                       MVT::i8, false, false, Alignment);
+                                       MVT::i8, false, false, false, Alignment);
       MemOpChains.push_back(Subword.getValue(1));
       // Insert the loaded byte to LoadVal.
       // FIXME: Use INS if supported by target.
       unsigned ShiftAmt = isLittle ? 16 : 8;
       SDValue Shift = DAG.getNode(ISD::SHL, dl, MVT::i32, Subword,
-                                  DAG.getConstant(ShiftAmt, MVT::i32));
+                                  DAG.getConstant(ShiftAmt,dl,  MVT::i32));
       LoadVal = DAG.getNode(ISD::OR, dl, MVT::i32, LoadVal, Shift);
     }
 
@@ -1146,14 +1143,15 @@ WriteByValArg(SDValue Chain, SDLoc dl,
 
   // Copy remaining part of byval arg using memcpy.
   SDValue Src = DAG.getNode(ISD::ADD, dl, MVT::i32, Arg,
-                            DAG.getConstant(Offset, MVT::i32));
+                            DAG.getConstant(Offset,dl,  MVT::i32));
   SDValue Dst = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr,
-                            DAG.getIntPtrConstant(LocMemOffset));
+                            DAG.getIntPtrConstant(LocMemOffset, dl));
   Chain = DAG.getMemcpy(Chain, dl, Dst, Src,
-                        DAG.getConstant(RemainingSize, MVT::i32),
+                        DAG.getConstant(RemainingSize, dl, MVT::i32),
                         std::min(ByValAlign, (unsigned)4),
                         /*isVolatile=*/false, /*AlwaysInline=*/false,
-                        MachinePointerInfo(0), MachinePointerInfo(0));
+                        /*isTailCall=*/false,
+                        MachinePointerInfo(), MachinePointerInfo());
   MemOpChains.push_back(Chain);
 }
 
@@ -1179,14 +1177,14 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo *MFI = MF.getFrameInfo();
-  const TargetFrameLowering *TFL = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFL = MF.getSubtarget().getFrameLowering();
   bool IsPIC = getTargetMachine().getRelocationModel() == Reloc::PIC_;
   Nios2FunctionInfo *Nios2FI = MF.getInfo<Nios2FunctionInfo>();
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), ArgLocs, *DAG.getContext());
+                 ArgLocs, *DAG.getContext());
 
   if (CallConv == CallingConv::Fast)
     CCInfo.AnalyzeCallOperands(Outs, CC_Nios2_FastCC);
@@ -1207,10 +1205,10 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Chain is the output chain of the last Load/Store or CopyToReg node.
   // ByValChain is the output chain of the last Memcpy node created for copying
   // byval arguments to the stack.
-  SDValue NextStackOffsetVal = DAG.getIntPtrConstant(NextStackOffset, true);
+  SDValue NextStackOffsetVal = DAG.getIntPtrConstant(NextStackOffset, dl, true);
   Chain = DAG.getCALLSEQ_START(Chain, NextStackOffsetVal, dl);
 
-  SDValue StackPtr = DAG.getCopyFromReg(Chain, dl, Nios2::SP, getPointerTy());
+  SDValue StackPtr = DAG.getCopyFromReg(Chain, dl, Nios2::SP, getPointerTy(DAG.getDataLayout()));
 
   if (Nios2FI->getMaxCallFrameSize() < NextStackOffset)
     Nios2FI->setMaxCallFrameSize(NextStackOffset);
@@ -1231,8 +1229,8 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       assert(Flags.getByValSize() &&
              "ByVal args of size 0 should have been ignored by front-end.");
       WriteByValArg(Chain, dl, RegsToPass, MemOpChains, StackPtr,
-                      MFI, DAG, Arg, VA, Flags, getPointerTy(),
-                      Subtarget->isLittle());
+                      MFI, DAG, Arg, VA, Flags, getPointerTy(DAG.getDataLayout()),
+                      Subtarget.isLittle());
       continue;
     }
 
@@ -1268,8 +1266,8 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
     // emit ISD::STORE whichs stores the
     // parameter value to a stack Location
-    SDValue PtrOff = DAG.getNode(ISD::ADD, dl, getPointerTy(), StackPtr,
-                                 DAG.getIntPtrConstant(VA.getLocMemOffset()));
+    SDValue PtrOff = DAG.getNode(ISD::ADD, dl, getPointerTy(DAG.getDataLayout()), StackPtr,
+                                 DAG.getIntPtrConstant(VA.getLocMemOffset(), dl));
     MemOpChains.push_back(DAG.getStore(Chain, dl, Arg, PtrOff,
                                        MachinePointerInfo(), false, false, 0));
   }
@@ -1277,8 +1275,7 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Transform all store nodes into one single node because all store
   // nodes are independent of each other.
   if (!MemOpChains.empty())
-    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other,
-                        &MemOpChains[0], MemOpChains.size());
+    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, MemOpChains);
 
   // If the callee is a GlobalAddress/ExternalSymbol node (quite common, every
   // direct call is) turn it into a TargetGlobalAddress/TargetExternalSymbol
@@ -1292,21 +1289,21 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     if (IsPICCall && G->getGlobal()->hasInternalLinkage()) {
       OpFlag = Nios2II::MO_GOT_PAGE;
       unsigned char LoFlag = Nios2II::MO_LO16;
-      Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(), 0,
+      Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(DAG.getDataLayout()), 0,
                                           OpFlag);
-      CalleeLo = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(),
+      CalleeLo = DAG.getTargetGlobalAddress(G->getGlobal(), dl, getPointerTy(DAG.getDataLayout()),
                                             0, LoFlag);
     } else {
       OpFlag = IsPICCall ? Nios2II::MO_GOT_CALL : Nios2II::MO_NO_FLAG;
       Callee = DAG.getTargetGlobalAddress(G->getGlobal(), dl,
-                                          getPointerTy(), 0, OpFlag);
+                                          getPointerTy(DAG.getDataLayout()), 0, OpFlag);
     }
 
     GlobalOrExternal = true;
   }
   else if (ExternalSymbolSDNode *S = dyn_cast<ExternalSymbolSDNode>(Callee)) {
     OpFlag = Nios2II::MO_NO_FLAG;
-    Callee = DAG.getTargetExternalSymbol(S->getSymbol(), getPointerTy(),
+    Callee = DAG.getTargetExternalSymbol(S->getSymbol(), getPointerTy(DAG.getDataLayout()),
                                          OpFlag);
     GlobalOrExternal = true;
   }
@@ -1317,16 +1314,16 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   if (IsPICCall) {
     if (GlobalOrExternal) {
       // Load callee address
-      Callee = DAG.getNode(Nios2ISD::Wrapper, dl, getPointerTy(),
-                           GetGlobalReg(DAG, getPointerTy()), Callee);
-      SDValue LoadValue = DAG.getLoad(getPointerTy(), dl, DAG.getEntryNode(),
-                                      Callee, MachinePointerInfo::getGOT(),
+      Callee = DAG.getNode(Nios2ISD::Wrapper, dl, getPointerTy(DAG.getDataLayout()),
+                           GetGlobalReg(DAG, getPointerTy(DAG.getDataLayout())), Callee);
+      SDValue LoadValue = DAG.getLoad(getPointerTy(DAG.getDataLayout()), dl, DAG.getEntryNode(),
+                                      Callee, MachinePointerInfo::getGOT(DAG.getMachineFunction()),
                                       false, false, false, 0);
 
       // Use GOT+LO if callee has internal linkage.
       if (CalleeLo.getNode()) {
-        SDValue Lo = DAG.getNode(Nios2ISD::Lo, dl, getPointerTy(), CalleeLo);
-        Callee = DAG.getNode(ISD::ADD, dl, getPointerTy(), LoadValue, Lo);
+        SDValue Lo = DAG.getNode(Nios2ISD::Lo, dl, getPointerTy(DAG.getDataLayout()), CalleeLo);
+        Callee = DAG.getNode(ISD::ADD, dl, getPointerTy(DAG.getDataLayout()), LoadValue, Lo);
       } else
         Callee = LoadValue;
     }
@@ -1366,20 +1363,20 @@ Nios2TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                                   RegsToPass[i].second.getValueType()));
 
   // Add a register mask operand representing the call-preserved registers.
-  const TargetRegisterInfo *TRI = getTargetMachine().getRegisterInfo();
-  const uint32_t *Mask = TRI->getCallPreservedMask(CallConv);
+  const TargetRegisterInfo *TRI = Subtarget.getRegisterInfo();
+  const uint32_t *Mask = TRI->getCallPreservedMask(DAG.getMachineFunction(), CallConv);
   assert(Mask && "Missing call preserved mask for calling convention");
   Ops.push_back(DAG.getRegisterMask(Mask));
 
   if (InFlag.getNode())
     Ops.push_back(InFlag);
 
-  Chain  = DAG.getNode(Nios2ISD::JmpLink, dl, NodeTys, &Ops[0], Ops.size());
+  Chain  = DAG.getNode(Nios2ISD::JmpLink, dl, NodeTys, Ops);
   InFlag = Chain.getValue(1);
 
   // Create the CALLSEQ_END node.
   Chain = DAG.getCALLSEQ_END(Chain, NextStackOffsetVal,
-                             DAG.getIntPtrConstant(0, true), InFlag, dl);
+                             DAG.getIntPtrConstant(0, dl, true), InFlag, dl);
   InFlag = Chain.getValue(1);
 
   // Handle result values, copying them out of physregs into vregs that we
@@ -1399,7 +1396,7 @@ Nios2TargetLowering::LowerCallResult(SDValue Chain, SDValue InFlag,
   // Assign locations to each value returned by this call.
   SmallVector<CCValAssign, 16> RVLocs;
   CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), RVLocs, *DAG.getContext());
+                 RVLocs, *DAG.getContext());
 
   CCInfo.AnalyzeCallResult(Ins, RetCC_Nios2);
 
@@ -1432,9 +1429,9 @@ static void ReadByValArg(MachineFunction &MF, SDValue Chain, SDLoc dl,
       break;
 
     unsigned SrcReg = O32IntRegs[CurWord];
-    unsigned Reg = AddLiveIn(MF, SrcReg, &Nios2::CPURegsRegClass);
+    unsigned Reg = addLiveIn(MF, SrcReg, &Nios2::CPURegsRegClass);
     SDValue StorePtr = DAG.getNode(ISD::ADD, dl, MVT::i32, FIN,
-                                   DAG.getConstant(i * 4, MVT::i32));
+                                   DAG.getConstant(i * 4, dl, MVT::i32));
     SDValue Store = DAG.getStore(Chain, dl, DAG.getRegister(Reg, MVT::i32),
                                  StorePtr, MachinePointerInfo(FuncArg, i * 4),
                                  false, false, 0);
@@ -1503,7 +1500,7 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
   // Assign locations to all of the incoming arguments.
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), ArgLocs, *DAG.getContext());
+                 ArgLocs, *DAG.getContext());
 
   if (CallConv == CallingConv::Fast)
     CCInfo.AnalyzeFormalArguments(Ins, CC_Nios2_FastCC);
@@ -1527,7 +1524,7 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
       LastFI = MFI->CreateFixedObject(NumWords * 4,
           VA.isMemLoc() ? VA.getLocMemOffset() : 0,
           true);
-      SDValue FIN = DAG.getFrameIndex(LastFI, getPointerTy());
+      SDValue FIN = DAG.getFrameIndex(LastFI, getPointerTy(DAG.getDataLayout()));
       InVals.push_back(FIN);
       ReadByValArg(MF, Chain, dl, OutChains, DAG, NumWords, FIN, VA, Flags,
                    &*FuncArg);
@@ -1547,7 +1544,7 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
 
       // Transform the arguments stored on
       // physical registers into virtual ones
-      unsigned Reg = AddLiveIn(DAG.getMachineFunction(), ArgReg, RC);
+      unsigned Reg = addLiveIn(DAG.getMachineFunction(), ArgReg, RC);
       SDValue ArgValue = DAG.getCopyFromReg(Chain, dl, Reg, RegVT);
 
       // If this is an 8 or 16-bit value, it has been passed promoted
@@ -1576,9 +1573,9 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
                                       VA.getLocMemOffset(), true);
 
       // Create load nodes to retrieve arguments from the stack
-      SDValue FIN = DAG.getFrameIndex(LastFI, getPointerTy());
+      SDValue FIN = DAG.getFrameIndex(LastFI, getPointerTy(DAG.getDataLayout()));
       InVals.push_back(DAG.getLoad(ValVT, dl, Chain, FIN,
-                                   MachinePointerInfo::getFixedStack(LastFI),
+                                   MachinePointerInfo::getFixedStack(DAG.getMachineFunction(), LastFI),
                                    false, false, false, 0));
     }
   }
@@ -1598,8 +1595,8 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
 
   if (isVarArg) {
     unsigned NumOfRegs = 4;
-    const uint16_t *ArgRegs = O32IntRegs;
-    unsigned Idx = CCInfo.getFirstUnallocated(ArgRegs, NumOfRegs);
+    ArrayRef<MCPhysReg> ArgRegs = O32IntRegs;
+    unsigned Idx = CCInfo.getFirstUnallocated(ArgRegs);
     int FirstRegSlotOffset = 0;
     const TargetRegisterClass *RC = (const TargetRegisterClass*)&Nios2::CPURegsRegClass;
     unsigned RegSize = RC->getSize();
@@ -1622,11 +1619,11 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
     // callee's stack frame.
     for (int StackOffset = RegSlotOffset;
          Idx < NumOfRegs; ++Idx, StackOffset += RegSize) {
-      unsigned Reg = AddLiveIn(DAG.getMachineFunction(), ArgRegs[Idx], RC);
+      unsigned Reg = addLiveIn(DAG.getMachineFunction(), ArgRegs[Idx], RC);
       SDValue ArgValue = DAG.getCopyFromReg(Chain, dl, Reg,
                                             MVT::getIntegerVT(RegSize * 8));
       LastFI = MFI->CreateFixedObject(RegSize, StackOffset, true);
-      SDValue PtrOff = DAG.getFrameIndex(LastFI, getPointerTy());
+      SDValue PtrOff = DAG.getFrameIndex(LastFI, getPointerTy(DAG.getDataLayout()));
       OutChains.push_back(DAG.getStore(Chain, dl, ArgValue, PtrOff,
                                        MachinePointerInfo(), false, false, 0));
     }
@@ -1638,8 +1635,7 @@ Nios2TargetLowering::LowerFormalArguments(SDValue Chain,
   // the size of Ins and InVals. This only happens when on varg functions
   if (!OutChains.empty()) {
     OutChains.push_back(Chain);
-    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other,
-                        &OutChains[0], OutChains.size());
+    Chain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
   }
 
   return Chain;
@@ -1662,7 +1658,7 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
 
   // CCState - Info about the registers and stack slot.
   CCState CCInfo(CallConv, isVarArg, DAG.getMachineFunction(),
-                 getTargetMachine(), RVLocs, *DAG.getContext());
+                 RVLocs, *DAG.getContext());
 
   // Analize return values.
   CCInfo.AnalyzeReturn(Outs, RetCC_Nios2);
@@ -1688,17 +1684,17 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
   // a virtual register in the entry block, so now we copy the value out
   // and into $v0.
   if (DAG.getMachineFunction().getFunction()->hasStructRetAttr()) {
-    MachineFunction &MF      = DAG.getMachineFunction();
+    MachineFunction &MF = DAG.getMachineFunction();
     Nios2FunctionInfo *Nios2FI = MF.getInfo<Nios2FunctionInfo>();
     unsigned Reg = Nios2FI->getSRetReturnReg();
 
     if (!Reg)
       llvm_unreachable("sret virtual register not created in the entry block");
-    SDValue Val = DAG.getCopyFromReg(Chain, dl, Reg, getPointerTy());
+    SDValue Val = DAG.getCopyFromReg(Chain, dl, Reg, getPointerTy(DAG.getDataLayout()));
 
     Chain = DAG.getCopyToReg(Chain, dl, Nios2::R2, Val, Flag);
     Flag = Chain.getValue(1);
-    RetOps.push_back(DAG.getRegister(Nios2::R2, getPointerTy()));
+    RetOps.push_back(DAG.getRegister(Nios2::R2, getPointerTy(DAG.getDataLayout())));
   }
 
   RetOps[0] = Chain;
@@ -1708,7 +1704,7 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
     RetOps.push_back(Flag);
 
   // Return Void
-  return DAG.getNode(Nios2ISD::Ret, dl, MVT::Other, &RetOps[0], RetOps.size());
+  return DAG.getNode(Nios2ISD::Ret, dl, MVT::Other, RetOps);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1892,9 +1888,10 @@ parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const {
 /// Given a register class constraint, like 'r', if this corresponds directly
 /// to an LLVM register class, return a register of 0 and the register class
 /// pointer.
-std::pair<unsigned, const TargetRegisterClass*> Nios2TargetLowering::
-getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const
-{
+std::pair<unsigned, const TargetRegisterClass*> 
+Nios2TargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI, 
+                                                  StringRef Constraint, 
+                                                  MVT VT) const {
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
     case 'd': // Address register. Same as 'r' unless generating MIPS16 code.
@@ -1914,7 +1911,7 @@ getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const
 //  if (R.second)
 //    return R;
 //
-  return TargetLowering::getRegForInlineAsmConstraint(Constraint, VT);
+  return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 }
 
 /// LowerAsmOperandForConstraint - Lower the specified operand into the Ops
@@ -1928,6 +1925,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
   // Only support length 1 constraints for now.
   if (Constraint.length() > 1) return;
 
+  SDLoc DL(Op);
   char ConstraintLetter = Constraint[0];
   switch (ConstraintLetter) {
   default: break; // This will fall through to the generic implementation
@@ -1937,7 +1935,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       int64_t Val = C->getSExtValue();
       if (isInt<16>(Val)) {
-        Result = DAG.getTargetConstant(Val, Type);
+        Result = DAG.getTargetConstant(Val, DL, Type);
         break;
       }
     }
@@ -1947,7 +1945,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       int64_t Val = C->getZExtValue();
       if (Val == 0) {
-        Result = DAG.getTargetConstant(0, Type);
+        Result = DAG.getTargetConstant(0, DL, Type);
         break;
       }
     }
@@ -1957,7 +1955,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       uint64_t Val = (uint64_t)C->getZExtValue();
       if (isUInt<16>(Val)) {
-        Result = DAG.getTargetConstant(Val, Type);
+        Result = DAG.getTargetConstant(Val, DL, Type);
         break;
       }
     }
@@ -1967,7 +1965,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       int64_t Val = C->getSExtValue();
       if ((isInt<32>(Val)) && ((Val & 0xffff) == 0)){
-        Result = DAG.getTargetConstant(Val, Type);
+        Result = DAG.getTargetConstant(Val, DL, Type);
         break;
       }
     }
@@ -1977,7 +1975,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       int64_t Val = C->getSExtValue();
       if ((Val >= -65535) && (Val <= -1)) {
-        Result = DAG.getTargetConstant(Val, Type);
+        Result = DAG.getTargetConstant(Val, DL, Type);
         break;
       }
     }
@@ -1987,7 +1985,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       int64_t Val = C->getSExtValue();
       if ((isInt<15>(Val))) {
-        Result = DAG.getTargetConstant(Val, Type);
+        Result = DAG.getTargetConstant(Val, DL, Type);
         break;
       }
     }
@@ -1997,7 +1995,7 @@ void Nios2TargetLowering::LowerAsmOperandForConstraint(SDValue Op,
       EVT Type = Op.getValueType();
       int64_t Val = C->getSExtValue();
       if ((Val <= 65535) && (Val >= 1)) {
-        Result = DAG.getTargetConstant(Val, Type);
+        Result = DAG.getTargetConstant(Val, DL, Type);
         break;
       }
     }
@@ -2019,10 +2017,11 @@ Nios2TargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
   return false;
 }
 
-MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
-    MachineInstr *MI, MachineBasicBlock *BB) const {
+MachineBasicBlock *
+Nios2TargetLowering::EmitInstrWithCustomInserter(MachineInstr *MI,
+                                                 MachineBasicBlock *BB) const {
   MachineFunction *MF = BB->getParent();
-  const TargetInstrInfo *TII = getTargetMachine().getInstrInfo();
+  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
   MachineBasicBlock::iterator I = MachineBasicBlock::iterator(MI);
 
   DEBUG(dbgs() << "Custom inserting " << *MI);
@@ -2068,7 +2067,7 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
       MachineBasicBlock *BB2 = MF->CreateMachineBasicBlock(LLVM_BB);
       MachineBasicBlock *ExitBB = MF->CreateMachineBasicBlock(LLVM_BB);
       // Add new BBs
-      MachineFunction::iterator FIt = llvm::next(MachineFunction::iterator(BB));
+      MachineFunction::iterator FIt = std::next(MachineFunction::iterator(BB));
       MF->insert(FIt, BB1);
       MF->insert(FIt, BB2);
       MF->insert(FIt, ExitBB);
@@ -2099,7 +2098,7 @@ MachineBasicBlock *Nios2TargetLowering::EmitInstrWithCustomInserter(
         .addReg(resx).addMBB(BB1)
         .addReg(resy).addMBB(BB2);
 
-      ExitBB->splice(ExitBB->end(), BB, llvm::next(I), BB->end());
+      ExitBB->splice(ExitBB->end(), BB, std::next(I), BB->end());
       ExitBB->transferSuccessorsAndUpdatePHIs(BB);
       BB->addSuccessor(BB1);
       BB->addSuccessor(BB2);

@@ -12,11 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef Nios2ISELLOWERING_H
-#define Nios2ISELLOWERING_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2ISELLOWERING_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2ISELLOWERING_H
 
 #include "Nios2.h"
-#include "Nios2Subtarget.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/Target/TargetLowering.h"
 
@@ -56,27 +55,31 @@ namespace llvm {
   //===--------------------------------------------------------------------===//
   // TargetLowering Implementation
   //===--------------------------------------------------------------------===//
+  class Nios2Subtarget;
 
   class Nios2TargetLowering : public TargetLowering  {
   public:
-    explicit Nios2TargetLowering(Nios2TargetMachine &TM);
+    explicit Nios2TargetLowering(const Nios2TargetMachine &TM, 
+                                 const Nios2Subtarget &STI);
 
     virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i32; }
 
-    virtual bool allowsUnalignedMemoryAccesses (EVT VT, bool *Fast) const;
+    virtual bool allowsUnalignedMemoryAccesses(EVT VT, bool *Fast) const;
 
     /// LowerOperation - Provide custom lowering hooks for some operations.
-    virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
     /// getTargetNodeName - This method returns the name of a target specific
     //  DAG node.
-    virtual const char *getTargetNodeName(unsigned Opcode) const;
+    const char *getTargetNodeName(unsigned Opcode) const override;
 
     /// getSetCCResultType - get the ISD::SETCC result ValueType
-    virtual EVT getSetCCResultType(LLVMContext &Context, EVT VT) const;
+    EVT getSetCCResultType(const DataLayout &DL, 
+                           LLVMContext &Context, EVT VT) const override;
+
   private:
     // Subtarget Info
-    const Nios2Subtarget *Subtarget;
+    const Nios2Subtarget &Subtarget;
 
     // Lower Operand helpers
     SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
@@ -88,7 +91,7 @@ namespace llvm {
     // Lower Operand specifics
     //SDValue LowerBRCOND(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
     //SDValue LowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
@@ -136,11 +139,11 @@ namespace llvm {
       getConstraintType(const std::string &Constraint) const;
 
     virtual std::pair<unsigned, const TargetRegisterClass*>
-      getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const;
+      getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI, StringRef Constraint, MVT VT) const;
 
     std::pair<unsigned, const TargetRegisterClass *>
       parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const;
   };
 }
 
-#endif // Nios2ISELLOWERING_H
+#endif // LLVM_LIB_TARGET_NIOS2_NIOS2ISELLOWERING_H

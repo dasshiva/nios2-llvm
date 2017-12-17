@@ -11,39 +11,37 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "nios2-reg-info"
-
 #include "Nios2RegisterInfo.h"
 #include "Nios2.h"
 #include "Nios2InstrInfo.h"
 #include "Nios2Subtarget.h"
 #include "Nios2MachineFunction.h"
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/DebugInfo.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Type.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
-#include "llvm/Target/TargetFrameLowering.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetOptions.h"
-#include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetInstrInfo.h"
+
+using namespace llvm;
+
+#define DEBUG_TYPE "nios2-reg-info"
 
 #define GET_REGINFO_TARGET_DESC
 #include "Nios2GenRegisterInfo.inc"
 
-using namespace llvm;
-
-Nios2RegisterInfo::Nios2RegisterInfo(const Nios2Subtarget &ST,
-    const Nios2InstrInfo &I): Nios2GenRegisterInfo(Nios2::RA),
-  Subtarget(ST), TII(I) {}
+Nios2RegisterInfo::Nios2RegisterInfo(): Nios2GenRegisterInfo(Nios2::RA) {}
 
 unsigned Nios2RegisterInfo::getPICCallReg() { return Nios2::GP; }
 
@@ -58,7 +56,8 @@ getCalleeSavedRegs(const MachineFunction *MF) const {
 }
 
 const uint32_t*
-Nios2RegisterInfo::getCallPreservedMask(CallingConv::ID) const {
+Nios2RegisterInfo::getCallPreservedMask(const MachineFunction &MF, 
+                                        CallingConv::ID) const {
   return CSR_STD_RegMask;
 }
 
@@ -80,7 +79,7 @@ getReservedRegs(const MachineFunction &MF) const {
     Reserved.set(ReservedCPURegs[I]);
 
   // Reserve FP if this function should have a dedicated frame pointer register.
-  if (MF.getTarget().getFrameLowering()->hasFP(MF))
+  if (MF.getSubtarget().getFrameLowering()->hasFP(MF))
     Reserved.set(Nios2::FP);
 
   return Reserved;
@@ -178,6 +177,9 @@ void Nios2RegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
     unsigned NewImm;
 
     Nios2FI->setEmitNOAT();
+    const Nios2InstrInfo &TII =
+      *static_cast<const Nios2InstrInfo *>(
+        MBB.getParent()->getSubtarget().getInstrInfo());
     unsigned Reg = TII.loadImmediate(Offset, MBB, II, DL, &NewImm);
     BuildMI(MBB, II, DL, TII.get(Nios2::ADD), ATReg).addReg(FrameReg)
       .addReg(Reg);
@@ -195,7 +197,7 @@ void Nios2RegisterInfo::eliminateFI(MachineBasicBlock::iterator II,
 void Nios2RegisterInfo::
 eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I) const {
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   if (!TFI->hasReservedCallFrame(MF)) {
     int64_t Amount = I->getOperand(0).getImm();
@@ -203,9 +205,11 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
     if (I->getOpcode() == Nios2::ADJCALLSTACKDOWN)
       Amount = -Amount;
 
-    const Nios2InstrInfo *II = static_cast<const Nios2InstrInfo*>(&TII);
+    const Nios2InstrInfo &TII =
+      *static_cast<const Nios2InstrInfo *>(
+        MBB.getParent()->getSubtarget().getInstrInfo());
 
-    II->adjustStackPtr(Nios2::SP, Amount, MBB, I);
+    TII.adjustStackPtr(Nios2::SP, Amount, MBB, I);
   }
 
   MBB.erase(I);
@@ -213,7 +217,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
 
 unsigned Nios2RegisterInfo::
 getFrameRegister(const MachineFunction &MF) const {
-  const TargetFrameLowering *TFI = MF.getTarget().getFrameLowering();
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   return TFI->hasFP(MF) ? Nios2::FP : Nios2::SP;
 }
 

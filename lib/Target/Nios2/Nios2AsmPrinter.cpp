@@ -30,19 +30,21 @@
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/Mangler.h"
+#include "llvm/MC/MachineLocation.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetRegistry.h"
-#include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetOptions.h"
 
 using namespace llvm;
 
 bool Nios2AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
+  Subtarget = &MF.getSubtarget<Nios2Subtarget>();
   Nios2FI = MF.getInfo<Nios2FunctionInfo>();
   AsmPrinter::runOnMachineFunction(MF);
   return true;
@@ -57,14 +59,14 @@ void Nios2AsmPrinter::EmitInstruction(const MachineInstr *MI) {
     return;
   }
 
-  MachineBasicBlock::const_instr_iterator I = MI;
+  MachineBasicBlock::const_instr_iterator I = MI->getIterator();
   MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
 
   do {
     MCInst TmpInst0;
-    MCInstLowering.Lower(I++, TmpInst0);
-    OutStreamer.EmitInstruction(TmpInst0);
-  } while ((I != E) && I->isInsideBundle()); // Delay slot check
+    MCInstLowering.Lower(&*I, TmpInst0);
+    EmitToStreamer(*OutStreamer, TmpInst0);
+  } while ((++I != E) && I->isInsideBundle()); // Delay slot check
 }
 
 //===----------------------------------------------------------------------===//
@@ -165,17 +167,19 @@ void Nios2AsmPrinter::printHex32(unsigned Value, raw_ostream &O) {
 
 /// Frame Directive
 void Nios2AsmPrinter::emitFrameDirective() {
-  const TargetRegisterInfo &RI = *TM.getRegisterInfo();
+  const TargetRegisterInfo &RI = *MF->getSubtarget().getRegisterInfo();
 
   unsigned stackReg  = RI.getFrameRegister(*MF);
   unsigned returnReg = RI.getRARegister();
   unsigned stackSize = MF->getFrameInfo()->getStackSize();
 
+#if 0
   if (OutStreamer.hasRawTextSupport())
     OutStreamer.EmitRawText("\t.frame\t$" +
            StringRef(Nios2InstPrinter::getRegisterName(stackReg)).lower() +
            "," + Twine(stackSize) + ",$" +
            StringRef(Nios2InstPrinter::getRegisterName(returnReg)).lower());
+#endif
 }
 
 /// isBlockOnlyReachableByFallthough - Return true if the basic block has
@@ -194,7 +198,7 @@ bool Nios2AsmPrinter::isBlockOnlyReachableByFallthrough(const MachineBasicBlock*
 
   // If this is a landing pad, it isn't a fall through.  If it has no preds,
   // then nothing falls through to it.
-  if (MBB->isLandingPad() || MBB->pred_empty())
+  if (MBB->isEHPad() || MBB->pred_empty())
     return false;
 
   // If there isn't exactly one predecessor, it can't be a fall through.

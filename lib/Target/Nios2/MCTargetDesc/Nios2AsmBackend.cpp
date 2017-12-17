@@ -90,9 +90,9 @@ class Nios2AsmBackend : public MCAsmBackend {
 public:
   Nios2AsmBackend(const Target &T,  Triple::OSType _OSType,
                  bool _isLittle, bool _is64Bit)
-    :MCAsmBackend(), OSType(_OSType), IsLittle(_isLittle), Is64Bit(_is64Bit) {}
+    : MCAsmBackend(), OSType(_OSType), IsLittle(_isLittle), Is64Bit(_is64Bit) {}
 
-  MCObjectWriter *createObjectWriter(raw_ostream &OS) const {
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
     return createNios2ELFObjectWriter(OS,
       MCELFObjectTargetWriter::getOSABI(OSType), IsLittle, Is64Bit);
   }
@@ -101,7 +101,7 @@ public:
   /// data fragment, at the offset specified by the fixup and following the
   /// fixup kind as appropriate.
   void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
-                  uint64_t Value) const {
+                  uint64_t Value, bool isPCRel) const override {
     MCFixupKind Kind = Fixup.getKind();
     Value = adjustFixupValue((unsigned)Kind, Value);
 
@@ -146,7 +146,7 @@ public:
     }
   }
 
-  unsigned getNumFixupKinds() const { return Nios2::NumTargetFixupKinds; }
+  unsigned getNumFixupKinds() const override { return Nios2::NumTargetFixupKinds; }
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const {
     const static MCFixupKindInfo Infos[Nios2::NumTargetFixupKinds] = {
@@ -206,7 +206,7 @@ public:
   /// relaxation.
   ///
   /// \param Inst - The instruction to test.
-  bool mayNeedRelaxation(const MCInst &Inst) const {
+  bool mayNeedRelaxation(const MCInst &Inst) const override {
     return false;
   }
 
@@ -215,7 +215,7 @@ public:
   bool fixupNeedsRelaxation(const MCFixup &Fixup,
                             uint64_t Value,
                             const MCRelaxableFragment *DF,
-                            const MCAsmLayout &Layout) const {
+                            const MCAsmLayout &Layout) const override {
     // FIXME.
     assert(0 && "RelaxInstruction() unimplemented");
     return false;
@@ -227,7 +227,7 @@ public:
   /// \param Inst - The instruction to relax, which may be the same
   /// as the output.
   /// \param [out] Res On return, the relaxed instruction.
-  void relaxInstruction(const MCInst &Inst, MCInst &Res) const {
+  void relaxInstruction(const MCInst &Inst, MCInst &Res) const override {
   }
 
   /// @}
@@ -237,7 +237,7 @@ public:
   /// it should return an error.
   ///
   /// \return - True on success.
-  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const {
+  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override {
     // Check for a less than instruction size number of bytes
     // FIXME: 16 bit instructions are not handled yet here.
     // We shouldn't be using a hard coded number for instruction size.
@@ -245,7 +245,7 @@ public:
 
     uint64_t NumNops = Count / 4;
     for (uint64_t i = 0; i != NumNops; ++i)
-      OW->Write32(0);
+      OW->write32(0);
     return true;
   }
 }; // class Nios2AsmBackend
@@ -254,10 +254,8 @@ public:
 
 // MCAsmBackend
 MCAsmBackend *llvm::createNios2AsmBackend(const Target &T,
-                                             const MCRegisterInfo &MRI,
-                                             StringRef TT,
-                                             StringRef CPU) {
-  return new Nios2AsmBackend(T, Triple(TT).getOS(),
-                            /*IsLittle*/true, /*Is64Bit*/false);
+                                          const MCRegisterInfo &MRI,
+                                          const Triple &TT, StringRef CPU) {
+  return new Nios2AsmBackend(T, TT.getOS(), /*IsLittle*/true, /*Is64Bit*/false);
 }
 

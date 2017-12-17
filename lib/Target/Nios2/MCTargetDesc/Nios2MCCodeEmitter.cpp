@@ -10,8 +10,7 @@
 // This file implements the Nios2MCCodeEmitter class.
 //
 //===----------------------------------------------------------------------===//
-//
-#define DEBUG_TYPE "mccodeemitter"
+
 #include "MCTargetDesc/Nios2BaseInfo.h"
 #include "MCTargetDesc/Nios2FixupKinds.h"
 #include "MCTargetDesc/Nios2MCTargetDesc.h"
@@ -27,6 +26,8 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
+
+#define DEBUG_TYPE "mccodeemitter"
 
 // If the D<shift> instruction has a shift amount that is greater
 // than 31 (checked in calling routine), lower it to a D<shift>32 instruction
@@ -92,79 +93,94 @@ using namespace llvm;
 
 namespace {
 class Nios2MCCodeEmitter : public MCCodeEmitter {
-  Nios2MCCodeEmitter(const Nios2MCCodeEmitter &) LLVM_DELETED_FUNCTION;
-  void operator=(const Nios2MCCodeEmitter &) LLVM_DELETED_FUNCTION;
+  Nios2MCCodeEmitter(const Nios2MCCodeEmitter &) = delete;
+  void operator=(const Nios2MCCodeEmitter &) = delete;
   const MCInstrInfo &MCII;
   MCContext &Ctx;
   bool IsLittleEndian;
 
 public:
-  Nios2MCCodeEmitter(const MCInstrInfo &mcii, MCContext &Ctx_, bool IsLittle) :
-    MCII(mcii), Ctx(Ctx_), IsLittleEndian(IsLittle) {}
+  Nios2MCCodeEmitter(const MCInstrInfo &mcii, MCContext &Ctx_, bool IsLittle) 
+    : MCII(mcii), Ctx(Ctx_), IsLittleEndian(IsLittle) {}
 
   ~Nios2MCCodeEmitter() {}
 
-  void EmitByte(unsigned char C, raw_ostream &OS) const {
-    OS << (char)C;
-  }
+  void EmitByte(unsigned char C, raw_ostream &OS) const;
 
-  void EmitInstruction(uint64_t Val, unsigned Size, raw_ostream &OS) const {
-    // Output the instruction encoding in little endian byte order.
-    for (unsigned i = 0; i < Size; ++i) {
-      unsigned Shift = IsLittleEndian ? i * 8 : (Size - 1 - i) * 8;
-      EmitByte((Val >> Shift) & 0xff, OS);
-    }
-  }
+  void EmitInstruction(uint64_t Val, unsigned Size, const MCSubtargetInfo &STI,
+                       raw_ostream &OS) const;
 
-  void EncodeInstruction(const MCInst &MI, raw_ostream &OS,
-                         SmallVectorImpl<MCFixup> &Fixups) const;
+  void encodeInstruction(const MCInst &MI, raw_ostream &OS,
+                         SmallVectorImpl<MCFixup> &Fixups,
+                         const MCSubtargetInfo &STI) const;
 
   // getBinaryCodeForInstr - TableGen'erated function for getting the
   // binary encoding for an instruction.
   uint64_t getBinaryCodeForInstr(const MCInst &MI,
-                                 SmallVectorImpl<MCFixup> &Fixups) const;
+                                 SmallVectorImpl<MCFixup> &Fixups,
+                                 const MCSubtargetInfo &STI) const;
 
   // getBranchJumpOpValue - Return binary encoding of the jump
   // target operand. If the machine operand requires relocation,
   // record the relocation and return zero.
-   unsigned getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
-                                 SmallVectorImpl<MCFixup> &Fixups) const;
+  unsigned getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
+                                SmallVectorImpl<MCFixup> &Fixups,
+                                const MCSubtargetInfo &STI) const;
 
    // getBranchTargetOpValue - Return binary encoding of the branch
    // target operand. If the machine operand requires relocation,
    // record the relocation and return zero.
   unsigned getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
-                                  SmallVectorImpl<MCFixup> &Fixups) const;
+                                  SmallVectorImpl<MCFixup> &Fixups,
+                                  const MCSubtargetInfo &STI) const;
 
    // getMachineOpValue - Return binary encoding of operand. If the machin
    // operand requires relocation, record the relocation and return zero.
-  unsigned getMachineOpValue(const MCInst &MI,const MCOperand &MO,
-                             SmallVectorImpl<MCFixup> &Fixups) const;
+  unsigned getMachineOpValue(const MCInst &MI, const MCOperand &MO,
+                             SmallVectorImpl<MCFixup> &Fixups,
+                             const MCSubtargetInfo &STI) const;
 
   unsigned getMemEncoding(const MCInst &MI, unsigned OpNo,
-                          SmallVectorImpl<MCFixup> &Fixups) const;
+                          SmallVectorImpl<MCFixup> &Fixups,
+                          const MCSubtargetInfo &STI) const;
   unsigned getSizeExtEncoding(const MCInst &MI, unsigned OpNo,
-                              SmallVectorImpl<MCFixup> &Fixups) const;
+                              SmallVectorImpl<MCFixup> &Fixups,
+                              const MCSubtargetInfo &STI) const;
   unsigned getSizeInsEncoding(const MCInst &MI, unsigned OpNo,
-                              SmallVectorImpl<MCFixup> &Fixups) const;
+                              SmallVectorImpl<MCFixup> &Fixups,
+                              const MCSubtargetInfo &STI) const;
 
 }; // class Nios2MCCodeEmitter
 }  // namespace
 
 MCCodeEmitter *llvm::createNios2MCCodeEmitter(const MCInstrInfo &MCII,
-                                               const MCRegisterInfo &MRI,
-                                               const MCSubtargetInfo &STI,
-                                               MCContext &Ctx)
-{
+                                              const MCRegisterInfo &MRI,
+                                              MCContext &Ctx) {
   return new Nios2MCCodeEmitter(MCII, Ctx, true);
+}
+
+void Nios2MCCodeEmitter::EmitByte(unsigned char C, raw_ostream &OS) const {
+  OS << (char)C;
+}
+
+void Nios2MCCodeEmitter::EmitInstruction(uint64_t Val, unsigned Size,
+                                         const MCSubtargetInfo &STI,
+                                         raw_ostream &OS) const {
+  // Output the instruction encoding in little endian byte order.
+  // Little-endian byte ordering:
+  //   nios2:   4 | 3 | 2 | 1
+  for (unsigned i = 0; i < Size; ++i) {
+    unsigned Shift = IsLittleEndian ? i * 8 : (Size - 1 - i) * 8;
+    EmitByte((Val >> Shift) & 0xff, OS);
+  }
 }
 
 /// EncodeInstruction - Emit the instruction.
 /// Size the instruction (currently only 4 bytes
 void Nios2MCCodeEmitter::
-EncodeInstruction(const MCInst &MI, raw_ostream &OS,
-                  SmallVectorImpl<MCFixup> &Fixups) const
-{
+encodeInstruction(const MCInst &MI, raw_ostream &OS,
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
 
   // Non-pseudo instructions that get changed for direct object
   // only based on operand values.
@@ -184,7 +200,7 @@ EncodeInstruction(const MCInst &MI, raw_ostream &OS,
   //  LowerDextDins(TmpInst);
   //}
 
-  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups);
+  uint32_t Binary = getBinaryCodeForInstr(TmpInst, Fixups, STI);
 
   // Check for unimplemented opcodes.
   // Unfortunately in NIOS2 both NOP and SLL will come in with Binary == 0
@@ -206,7 +222,7 @@ EncodeInstruction(const MCInst &MI, raw_ostream &OS,
   if (!Size)
     llvm_unreachable("Desc.getSize() returns 0");
 
-  EmitInstruction(Binary, Size, OS);
+  EmitInstruction(Binary, Size, STI, OS);
 }
 
 /// getBranchTargetOpValue - Return binary encoding of the branch
@@ -214,17 +230,19 @@ EncodeInstruction(const MCInst &MI, raw_ostream &OS,
 /// record the relocation and return zero.
 unsigned Nios2MCCodeEmitter::
 getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
-                       SmallVectorImpl<MCFixup> &Fixups) const {
+                       SmallVectorImpl<MCFixup> &Fixups,
+                       const MCSubtargetInfo &STI) const {
 
   const MCOperand &MO = MI.getOperand(OpNo);
 
   // If the destination is an immediate, we have nothing to do.
   if (MO.isImm()) return MO.getImm();
+
   assert(MO.isExpr() &&
          "getBranchTargetOpValue expects only expressions or immediates");
 
   const MCExpr *Expr = MO.getExpr();
-  Fixups.push_back(MCFixup::Create(0, Expr,
+  Fixups.push_back(MCFixup::create(0, Expr,
                                    MCFixupKind(Nios2::fixup_Nios2_PC16)));
   return 0;
 }
@@ -234,16 +252,19 @@ getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
 /// record the relocation and return zero.
 unsigned Nios2MCCodeEmitter::
 getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
-                     SmallVectorImpl<MCFixup> &Fixups) const {
+                     SmallVectorImpl<MCFixup> &Fixups,
+                     const MCSubtargetInfo &STI) const {
 
   const MCOperand &MO = MI.getOperand(OpNo);
+
   // If the destination is an immediate, we have nothing to do.
   if (MO.isImm()) return MO.getImm();
+
   assert(MO.isExpr() &&
          "getJumpTargetOpValue expects only expressions or an immediate");
 
   const MCExpr *Expr = MO.getExpr();
-  Fixups.push_back(MCFixup::Create(0, Expr,
+  Fixups.push_back(MCFixup::create(0, Expr,
                                    MCFixupKind(Nios2::fixup_Nios2_26)));
   return 0;
 }
@@ -252,7 +273,8 @@ getJumpTargetOpValue(const MCInst &MI, unsigned OpNo,
 /// operand requires relocation, record the relocation and return zero.
 unsigned Nios2MCCodeEmitter::
 getMachineOpValue(const MCInst &MI, const MCOperand &MO,
-                  SmallVectorImpl<MCFixup> &Fixups) const {
+                  SmallVectorImpl<MCFixup> &Fixups,
+                  const MCSubtargetInfo &STI) const {
   if (MO.isReg()) {
     unsigned Reg = MO.getReg();
     unsigned RegNo = Ctx.getRegisterInfo()->getEncodingValue(Reg);
@@ -356,7 +378,7 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
     break;
   } // switch
 
-  Fixups.push_back(MCFixup::Create(0, MO.getExpr(), MCFixupKind(FixupKind)));
+  Fixups.push_back(MCFixup::create(0, MO.getExpr(), MCFixupKind(FixupKind)));
 
   // All of the information is in the fixup.
   return 0;
@@ -366,20 +388,22 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
 /// If the offset operand requires relocation, record the relocation.
 unsigned
 Nios2MCCodeEmitter::getMemEncoding(const MCInst &MI, unsigned OpNo,
-                                  SmallVectorImpl<MCFixup> &Fixups) const {
+                                  SmallVectorImpl<MCFixup> &Fixups,
+                                  const MCSubtargetInfo &STI) const {
   // Base register is encoded in bits 20-16, offset is encoded in bits 15-0.
   assert(MI.getOperand(OpNo).isReg());
-  unsigned RegBits = getMachineOpValue(MI, MI.getOperand(OpNo),Fixups) << 16;
-  unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo+1), Fixups);
+  unsigned RegBits = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI) << 16;
+  unsigned OffBits = getMachineOpValue(MI, MI.getOperand(OpNo+1), Fixups, STI);
 
   return (OffBits & 0xFFFF) | RegBits;
 }
 
 unsigned
 Nios2MCCodeEmitter::getSizeExtEncoding(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups) const {
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
   assert(MI.getOperand(OpNo).isImm());
-  unsigned SizeEncoding = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups);
+  unsigned SizeEncoding = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
   return SizeEncoding - 1;
 }
 
@@ -387,11 +411,12 @@ Nios2MCCodeEmitter::getSizeExtEncoding(const MCInst &MI, unsigned OpNo,
 //
 unsigned
 Nios2MCCodeEmitter::getSizeInsEncoding(const MCInst &MI, unsigned OpNo,
-                                      SmallVectorImpl<MCFixup> &Fixups) const {
+                                      SmallVectorImpl<MCFixup> &Fixups,
+                                      const MCSubtargetInfo &STI) const {
   assert(MI.getOperand(OpNo-1).isImm());
   assert(MI.getOperand(OpNo).isImm());
-  unsigned Position = getMachineOpValue(MI, MI.getOperand(OpNo-1), Fixups);
-  unsigned Size = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups);
+  unsigned Position = getMachineOpValue(MI, MI.getOperand(OpNo-1), Fixups, STI);
+  unsigned Size = getMachineOpValue(MI, MI.getOperand(OpNo), Fixups, STI);
 
   return Position + Size - 1;
 }

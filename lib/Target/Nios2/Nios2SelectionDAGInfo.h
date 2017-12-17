@@ -11,19 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef NIOS2SELECTIONDAGINFO_H
-#define NIOS2SELECTIONDAGINFO_H
+#ifndef LLVM_LIB_TARGET_NIOS2_NIOS2SELECTIONDAGINFO_H
+#define LLVM_LIB_TARGET_NIOS2_NIOS2SELECTIONDAGINFO_H
 
 #include "llvm/Target/TargetSelectionDAGInfo.h"
 
 namespace llvm {
 
-class Nios2TargetMachine;
-
 class Nios2SelectionDAGInfo : public TargetSelectionDAGInfo {
 public:
-  explicit Nios2SelectionDAGInfo(const Nios2TargetMachine &TM);
-  ~Nios2SelectionDAGInfo();
+
 };
 
 }

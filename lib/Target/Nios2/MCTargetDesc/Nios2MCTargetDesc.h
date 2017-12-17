@@ -15,31 +15,34 @@
 #define NIOS2MCTARGETDESC_H
 
 #include "llvm/Support/DataTypes.h"
-#include "llvm/Support/TargetRegistry.h"
 
 namespace llvm {
+class MCAsmBackend;
+class MCContext;
+class MCInstrInfo;
 class MCCodeEmitter;
 class MCObjectWriter;
-class MCAsmBackend;
+class MCRegisterInfo;
+class MCSubtargetInfo;
+class StringRef;
+class Target;
+class Triple;
+class raw_pwrite_stream;
 
 extern Target TheNios2StdTarget;
 
-MCObjectWriter *createNios2ELFObjectWriter(raw_ostream &OS,
-                                                uint8_t OSABI,
-                                                bool IsLittleEndian,
-                                                bool Is64Bit);
-
+MCObjectWriter *createNios2ELFObjectWriter(raw_pwrite_stream &OS,
+                                           uint8_t OSABI,
+                                           bool IsLittleEndian,
+                                           bool Is64Bit);
 
 MCCodeEmitter *createNios2MCCodeEmitter(const MCInstrInfo &MCII,
-                                               const MCRegisterInfo &MRI,
-                                               const MCSubtargetInfo &STI,
-                                               MCContext &Ctx);
+                                        const MCRegisterInfo &MRI,
+                                        MCContext &Ctx);
 
 MCAsmBackend *createNios2AsmBackend(const Target &T, 
                                     const MCRegisterInfo &MRI,
-                                    StringRef TT,
-                                    StringRef CPU);
-
+                                    const Triple &TT, StringRef CPU);
 }
 
 // Defines symbolic names for Nios2 registers.  This defines a mapping from
