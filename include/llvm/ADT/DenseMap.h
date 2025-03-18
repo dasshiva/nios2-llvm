@@ -111,6 +111,10 @@ public:
       }
     }
     assert(NumEntries == 0 && "Node count imbalance!");
+    // Asserts are disabled in Release Mode which causes warnings from the
+    // compiler about the variable NumEntries. Fix the warning by marking
+    // it unused - dasshiva
+    ((void)(NumEntries));
     setNumEntries(0);
     setNumTombstones(0);
   }

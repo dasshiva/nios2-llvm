@@ -1327,6 +1327,9 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::mipsel:  T.setArch(Triple::mips);       break;
   case Triple::ppc64le: T.setArch(Triple::ppc64);      break;
   case Triple::sparcel: T.setArch(Triple::sparc);      break;
+  // Add support for nios2 - dasshiva
+  // Nios2 is always little endian
+  case Triple::nios2: T.setArch(UnknownArch); break;
   }
   return T;
 }
@@ -1377,6 +1380,7 @@ Triple Triple::getLittleEndianArchVariant() const {
   case Triple::x86:
   case Triple::x86_64:
   case Triple::xcore:
+  case Triple::nios2: // Add support for nios2 - dasshiva
     // Already little endian.
     break;
 
