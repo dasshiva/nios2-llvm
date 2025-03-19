@@ -173,6 +173,12 @@ void Nios2AsmPrinter::emitFrameDirective() {
   unsigned returnReg = RI.getRARegister();
   unsigned stackSize = MF->getFrameInfo()->getStackSize();
 
+  // Remove unused variable warnings for stackReg, returnReg and
+  // stackSize
+  ((void) stackReg);
+  ((void) returnReg);
+  ((void) stackSize);
+
 #if 0
   if (OutStreamer.hasRawTextSupport())
     OutStreamer.EmitRawText("\t.frame\t$" +

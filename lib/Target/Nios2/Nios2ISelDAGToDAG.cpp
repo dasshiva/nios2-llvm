@@ -70,7 +70,7 @@ private:
 
   SDNode *getGlobalBaseReg();
 
-  SDNode *Select(SDNode *N);
+  SDNode *Select(SDNode *N) override;
 
   // Complex Pattern.
   bool SelectAddr(SDNode *Parent, SDValue N, SDValue &Base, SDValue &Offset);
@@ -361,7 +361,7 @@ SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintCode,
 
 /// createNios2ISelDag - This pass converts a legalized DAG into a
 /// NIOS2-specific DAG, ready for instruction scheduling.
-FunctionPass *llvm::createNios2ISelDag(Nios2TargetMachine &TM) {
+FunctionPass *createNios2ISelDag(Nios2TargetMachine &TM) {
   return new Nios2DAGToDAGISel(TM);
 }
 

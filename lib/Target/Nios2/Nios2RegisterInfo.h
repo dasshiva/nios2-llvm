@@ -36,20 +36,23 @@ public:
   void adjustNios2StackFrame(MachineFunction &MF) const;
 
   /// Code Generation virtual methods...
-  const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
+  const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) 
+	  const override;
   const uint32_t *getCallPreservedMask(const MachineFunction &MF, 
                                        CallingConv::ID) const override;
 
-  BitVector getReservedRegs(const MachineFunction &MF) const;
+  BitVector getReservedRegs(const MachineFunction &MF) const override;
 
-  virtual bool requiresRegisterScavenging(const MachineFunction &MF) const;
+  virtual bool requiresRegisterScavenging(const MachineFunction &MF) 
+	  const override;
 
-  virtual bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const;
+  virtual bool trackLivenessAfterRegAlloc(const MachineFunction &MF) 
+	  const override;
 
   /// Stack Frame Processing Methods
   virtual void eliminateFrameIndex(MachineBasicBlock::iterator II,
                            int SPAdj, unsigned FIOperandNum,
-                           RegScavenger *RS = NULL) const;
+                           RegScavenger *RS = NULL) const override;
 
   void processFunctionBeforeFrameFinalized(MachineFunction &MF) const;
 
@@ -57,7 +60,7 @@ public:
       MachineBasicBlock &MBB, MachineBasicBlock::iterator I) const;
 
   /// Debug information queries.
-  unsigned getFrameRegister(const MachineFunction &MF) const;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
 
   /// Exception handling queries.
   unsigned getEHExceptionRegister() const;

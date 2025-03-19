@@ -73,7 +73,7 @@ getReservedRegs(const MachineFunction &MF) const {
   };
 
   BitVector Reserved(getNumRegs());
-  typedef TargetRegisterClass::const_iterator RegIter;
+  // typedef TargetRegisterClass::const_iterator RegIter;
 
   for (unsigned I = 0; I < array_lengthof(ReservedCPURegs); ++I)
     Reserved.set(ReservedCPURegs[I]);

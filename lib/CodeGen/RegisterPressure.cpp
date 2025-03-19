@@ -316,7 +316,7 @@ namespace {
 /// Collect this instruction's unique uses and defs into SmallVectors for
 /// processing defs and uses in order.
 ///
-/// FIXME: always ignore tied opers
+/// FIXME: always ignore tied opers	
 class RegisterOperandsCollector {
   RegisterOperands &RegOpers;
   const TargetRegisterInfo &TRI;
@@ -336,7 +336,9 @@ class RegisterOperandsCollector {
     // Remove redundant physreg dead defs.
     SmallVectorImpl<unsigned>::iterator I =
       std::remove_if(RegOpers.DeadDefs.begin(), RegOpers.DeadDefs.end(),
-                     std::bind1st(std::ptr_fun(containsReg), RegOpers.Defs));
+        //std::bind(std::function<bool(ArrayRef<unsigned>, unsigned)>
+	//	(containsReg), std::placeholders::_1, RegOpers.Defs));
+	std::bind(&containsReg, RegOpers.Defs, std::placeholders::_1));
     RegOpers.DeadDefs.erase(I, RegOpers.DeadDefs.end());
   }
 

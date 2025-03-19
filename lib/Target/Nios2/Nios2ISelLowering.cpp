@@ -1714,7 +1714,7 @@ Nios2TargetLowering::LowerReturn(SDValue Chain,
 /// getConstraintType - Given a constraint letter, return the type of
 /// constraint it is for this target.
 Nios2TargetLowering::ConstraintType Nios2TargetLowering::
-getConstraintType(const std::string &Constraint) const
+getConstraintType(StringRef Constraint) const
 {
   // Nios2 specific constraints
   // GCC config/mips/constraints.md
@@ -1809,7 +1809,7 @@ parsePhysicalReg(const StringRef &C, std::string &Prefix,
 
   // Search for the first numeric character.
   StringRef::const_iterator I, B = C.begin() + 1, E = C.end() - 1;
-  I = std::find_if(B, E, std::ptr_fun(isdigit));
+  I = std::find_if(B, E, &isdigit);
 
   Prefix.assign(B, I - B);
 

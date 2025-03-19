@@ -150,7 +150,8 @@ void TargetMachine::setOptLevel(CodeGenOpt::Level Level) const {
 }
 
 TargetIRAnalysis TargetMachine::getTargetIRAnalysis() {
-  return TargetIRAnalysis([this](const Function &F) {
+  // Remove this from lambda capture
+  return TargetIRAnalysis([](const Function &F) {
     return TargetTransformInfo(F.getParent()->getDataLayout());
   });
 }

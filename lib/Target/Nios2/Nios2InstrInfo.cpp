@@ -32,7 +32,7 @@ void Nios2InstrInfo::anchor() {}
 
 Nios2InstrInfo::Nios2InstrInfo(const Nios2Subtarget &STI)
   : Nios2GenInstrInfo(Nios2::ADJCALLSTACKDOWN, Nios2::ADJCALLSTACKUP),
-    Subtarget(STI), UncondBrOpc(Nios2::BR), RI() {}
+    UncondBrOpc(Nios2::BR), Subtarget(STI), RI() {}
 
 bool Nios2InstrInfo::isZeroImm(const MachineOperand &op) const {
   return op.isImm() && op.getImm() == 0;

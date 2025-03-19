@@ -29,10 +29,9 @@ using namespace llvm;
 
 Nios2Subtarget::Nios2Subtarget(const Triple &TT, const std::string &CPU,
                                const std::string &FS, const Nios2TargetMachine &TM)
-  : Nios2GenSubtargetInfo(TT, CPU, FS), TargetTriple(TT),
-    Nios2ArchVersion(Nios2Std), Nios2ABI(UnknownABI),
-    InstrInfo(*this),
-    FrameLowering(*this), TLInfo(TM, *this) {
+  : Nios2GenSubtargetInfo(TT, CPU, FS), Nios2ArchVersion(Nios2Std), 
+	Nios2ABI(UnknownABI), TargetTriple(TT),
+    FrameLowering(*this), InstrInfo(*this), TLInfo(TM, *this) {
 
   initializeEnvironment();
   resetSubtargetFeatures(CPU, FS);

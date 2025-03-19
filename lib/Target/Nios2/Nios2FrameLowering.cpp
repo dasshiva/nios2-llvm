@@ -32,7 +32,8 @@ const Nios2FrameLowering *Nios2FrameLowering::create(const Nios2Subtarget &ST) {
   return new Nios2FrameLowering(ST);
 }
 
-static MCCFIInstruction convertMoveToCFI(const MCRegisterInfo &MRI,
+/* Unused function */
+/*static MCCFIInstruction convertMoveToCFI(const MCRegisterInfo &MRI,
                                          MCSymbol *Label,
                                          const MachineLocation &Dst,
                                          const MachineLocation &Src) {
@@ -55,6 +56,7 @@ static MCCFIInstruction convertMoveToCFI(const MCRegisterInfo &MRI,
   return MCCFIInstruction::createOffset(
       Label, MRI.getDwarfRegNum(Src.getReg(), true), Dst.getOffset());
 }
+*/
 
 void Nios2FrameLowering::emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const {
   MachineFrameInfo *MFI = MF.getFrameInfo();
@@ -62,6 +64,7 @@ void Nios2FrameLowering::emitPrologue(MachineFunction &MF, MachineBasicBlock &MB
     *static_cast<const Nios2InstrInfo*>(MF.getSubtarget().getInstrInfo());
   const Nios2RegisterInfo &RegInfo =
     *static_cast<const Nios2RegisterInfo*>(MF.getSubtarget().getRegisterInfo());
+  ((void) RegInfo);
 
   MachineBasicBlock::iterator MBBI = MBB.begin();
   DebugLoc dl = MBBI != MBB.end() ? MBBI->getDebugLoc() : DebugLoc();

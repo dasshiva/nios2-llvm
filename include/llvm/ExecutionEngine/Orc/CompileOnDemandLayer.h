@@ -310,7 +310,9 @@ private:
     // Initializers may refer to functions declared (but not defined) in this
     // module. Build a materializer to clone decls on demand.
     auto Materializer = createLambdaMaterializer(
-      [this, &GVsM, &LMResources](Value *V) -> Value* {
+      // [this, &GVsM, &LMResources](Value *V) -> Value* {
+      // Remove this from lambda capture to remove unused variable warning
+	 [&GVsM, &LMResources](Value *V) -> Value* {
         if (auto *F = dyn_cast<Function>(V)) {
           // Decls in the original module just get cloned.
           if (F->isDeclaration())
@@ -433,8 +435,10 @@ private:
     M->setDataLayout(SrcM.getDataLayout());
     ValueToValueMapTy VMap;
 
-    auto Materializer = createLambdaMaterializer([this, &LMResources, &M,
-                                                  &VMap](Value *V) -> Value * {
+    // Removed 'this' from lambda capture
+    // Removed &VMap from Lambda capture
+    auto Materializer = createLambdaMaterializer([&LMResources, &M
+                                                  ](Value *V) -> Value * {
       if (auto *GV = dyn_cast<GlobalVariable>(V))
         return cloneGlobalVariableDecl(*M, *GV);
 
@@ -479,14 +483,16 @@ private:
       moveFunctionBody(*F, VMap, &Materializer);
 
     // Create memory manager and symbol resolver.
+    // Remove 'this' from lambda capture
     auto Resolver = createLambdaResolver(
-        [this, &LD, LMH](const std::string &Name) {
+        [&LD, LMH](const std::string &Name) {
           if (auto Symbol = LD.findSymbolInternally(LMH, Name))
             return RuntimeDyld::SymbolInfo(Symbol.getAddress(),
                                            Symbol.getFlags());
           return LD.getDylibResources().ExternalSymbolResolver(Name);
         },
-        [this, &LD, LMH](const std::string &Name) {
+	// Remove 'this' from lambda capture
+        [&LD, LMH](const std::string &Name) {
           if (auto Symbol = LD.findSymbolInternally(LMH, Name))
             return RuntimeDyld::SymbolInfo(Symbol.getAddress(),
                                            Symbol.getFlags());

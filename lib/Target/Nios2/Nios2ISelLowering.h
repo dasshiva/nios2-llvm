@@ -112,34 +112,36 @@ namespace llvm {
                            CallingConv::ID CallConv, bool isVarArg,
                            const SmallVectorImpl<ISD::InputArg> &Ins,
                            SDLoc dl, SelectionDAG &DAG,
-                           SmallVectorImpl<SDValue> &InVals) const;
+                           SmallVectorImpl<SDValue> &InVals)
+      					const override;
 
     virtual SDValue
       LowerCall(TargetLowering::CallLoweringInfo &CLI,
-                SmallVectorImpl<SDValue> &InVals) const;
+                SmallVectorImpl<SDValue> &InVals) const override;
 
     virtual SDValue
       LowerReturn(SDValue Chain,
                   CallingConv::ID CallConv, bool isVarArg,
                   const SmallVectorImpl<ISD::OutputArg> &Outs,
                   const SmallVectorImpl<SDValue> &OutVals,
-                  SDLoc dl, SelectionDAG &DAG) const;
+                  SDLoc dl, SelectionDAG &DAG) const override;
 
-    virtual bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const;
+    virtual bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) 
+	    const override;
 
     virtual MachineBasicBlock *EmitInstrWithCustomInserter(MachineInstr *MI,
-                                  MachineBasicBlock *MBB) const;
+                                  MachineBasicBlock *MBB) const override;
 
     virtual void LowerAsmOperandForConstraint(SDValue Op,
         std::string &Constraint,
         std::vector<SDValue>&Ops,
-        SelectionDAG &DAG) const;
+        SelectionDAG &DAG) const override;
 
     virtual ConstraintType
-      getConstraintType(const std::string &Constraint) const;
+      getConstraintType(StringRef Constraint) const override;
 
     virtual std::pair<unsigned, const TargetRegisterClass*>
-      getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI, StringRef Constraint, MVT VT) const;
+      getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI, StringRef Constraint, MVT VT) const override;
 
     std::pair<unsigned, const TargetRegisterClass *>
       parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const;

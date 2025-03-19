@@ -85,7 +85,7 @@ public:
 
   /// Insert nop instruction when hazard condition is found
   virtual void insertNoop(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator MI) const;
+                          MachineBasicBlock::iterator MI) const override;
 
   virtual unsigned GetOppositeBranchOpc(unsigned Opc) const;
 
