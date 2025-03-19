@@ -367,7 +367,7 @@ public:
   bool isZero() const {
     assert(Rows != 0 && Cols != 0 && Data != nullptr && "Invalid matrix");
     return find_if(Data, Data + (Rows * Cols),
-                   std::bind2nd(std::not_equal_to<PBQPNum>(), 0)) ==
+                   std::bind(std::not_equal_to<PBQPNum>(), std::placeholders::_1, 0)) ==
       Data + (Rows * Cols);
   }
 

@@ -1609,6 +1609,7 @@ bool AddressSanitizer::runOnFunction(Function &F) {
   unsigned Alignment;
   uint64_t TypeSize;
 
+  ((void) NumAllocas);
   // Fill the set of memory operations to instrument.
   for (auto &BB : F) {
     AllBlocks.push_back(&BB);

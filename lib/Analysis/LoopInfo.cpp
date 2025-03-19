@@ -505,6 +505,7 @@ void UnloopUpdater::updateBlockParents() {
   // the DFS result cached by Traversal.
   bool Changed = FoundIB;
   for (unsigned NIters = 0; Changed; ++NIters) {
+    ((void) NIters);
     assert(NIters < Unloop->getNumBlocks() && "runaway iterative algorithm");
 
     // Iterate over the postorder list of blocks, propagating the nearest loop

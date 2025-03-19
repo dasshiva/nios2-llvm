@@ -1273,6 +1273,9 @@ void ScheduleDAGInstrs::fixupKills(MachineBasicBlock *MBB) {
 
   // Examine block from end to start...
   unsigned Count = MBB->size();
+
+  // Remove unused variable warning for Count in Release
+  ((void) Count);
   for (MachineBasicBlock::iterator I = MBB->end(), E = MBB->begin();
        I != E; --Count) {
     MachineInstr *MI = --I;

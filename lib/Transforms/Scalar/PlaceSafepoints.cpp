@@ -422,6 +422,7 @@ static Instruction *findLocationForEntrySafepoint(Function &F,
   auto nextInstruction = [&hasNextInstruction](Instruction *I) {
     assert(hasNextInstruction(I) &&
            "first check if there is a next instruction!");
+    ((void) hasNextInstruction);
     if (I->isTerminator()) {
       return &I->getParent()->getUniqueSuccessor()->front();
     } else {

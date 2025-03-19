@@ -2451,6 +2451,7 @@ bool GVN::runOnFunction(Function& F) {
   }
 
   unsigned Iteration = 0;
+  ((void) Iteration);
   while (ShouldContinue) {
     DEBUG(dbgs() << "GVN iteration: " << Iteration << "\n");
     ShouldContinue = iterateOnFunction(F);

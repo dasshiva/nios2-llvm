@@ -1702,6 +1702,7 @@ static void relocationViaAlloca(
   SmallVector<AllocaInst *, 200> PromotableAllocas;
   // Used later to chack that we have enough allocas to store all values
   std::size_t NumRematerializedValues = 0;
+  ((void) NumRematerializedValues);
   PromotableAllocas.reserve(Live.size());
 
   // Emit alloca for "LiveValue" and record it in "allocaMap" and

@@ -329,6 +329,7 @@ static bool rotateLoop(Loop *L, unsigned MaxHeaderSize, LoopInfo *LI,
     // be split.
     SmallVector<BasicBlock *, 4> ExitPreds(pred_begin(Exit), pred_end(Exit));
     bool SplitLatchEdge = false;
+    ((void) SplitLatchEdge);
     for (SmallVectorImpl<BasicBlock *>::iterator PI = ExitPreds.begin(),
                                                  PE = ExitPreds.end();
          PI != PE; ++PI) {

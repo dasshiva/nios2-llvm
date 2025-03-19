@@ -768,7 +768,8 @@ bool RegAllocPBQP::runOnMachineFunction(MachineFunction &MF) {
 
     bool PBQPAllocComplete = false;
     unsigned Round = 0;
-
+    // Remove unused warning for variable Round in Release
+    ((void) Round);
     while (!PBQPAllocComplete) {
       DEBUG(dbgs() << "  PBQP Regalloc round " << Round << ":\n");
 

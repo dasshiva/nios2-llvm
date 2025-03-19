@@ -291,6 +291,7 @@ void StackColoring::calculateLocalLiveness() {
   SmallPtrSet<const MachineBasicBlock*, 8> BBSet(BasicBlockNumbering.begin(),
                                                  BasicBlockNumbering.end());
   unsigned NumSSMIters = 0;
+  ((void) NumSSMIters);
   bool changed = true;
   while (changed) {
     changed = false;
@@ -456,6 +457,10 @@ void StackColoring::remapInstructions(DenseMap<int, int> &SlotRemap) {
   unsigned FixedInstr = 0;
   unsigned FixedMemOp = 0;
   unsigned FixedDbg = 0;
+
+  ((void) FixedInstr);
+  ((void) FixedMemOp);
+  ((void) FixedDbg);
   MachineModuleInfo *MMI = &MF->getMMI();
 
   // Remap debug information that refers to stack slots.

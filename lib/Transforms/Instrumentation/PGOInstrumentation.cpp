@@ -530,6 +530,7 @@ bool PGOUseFunc::readCounters(IndexedInstrProfReader *PGOReader) {
   NumOfPGOFunc++;
   DEBUG(dbgs() << CountFromProfile.size() << " counts\n");
   uint64_t ValueSum = 0;
+  ((void) ValueSum);
   for (unsigned I = 0, S = CountFromProfile.size(); I < S; I++) {
     DEBUG(dbgs() << "  " << I << ": " << CountFromProfile[I] << "\n");
     ValueSum += CountFromProfile[I];
@@ -570,6 +571,7 @@ void PGOUseFunc::populateCounters() {
 
   bool Changes = true;
   unsigned NumPasses = 0;
+  ((void) NumPasses);
   while (Changes) {
     NumPasses++;
     Changes = false;

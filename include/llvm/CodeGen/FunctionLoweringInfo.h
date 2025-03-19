@@ -242,7 +242,7 @@ private:
   void addSEHHandlersForLPads(ArrayRef<const LandingPadInst *> LPads);
 
   /// LiveOutRegInfo - Information about live out vregs.
-  IndexedMap<LiveOutInfo, VirtReg2IndexFunctor> LiveOutRegInfo;
+  IndexedMap<LiveOutInfo, VirtReg2IndexFunctor<unsigned>> LiveOutRegInfo;
 };
 
 /// ComputeUsesVAFloatArgument - Determine if any floating-point values are

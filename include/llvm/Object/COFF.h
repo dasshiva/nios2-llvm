@@ -892,7 +892,7 @@ private:
 
 class BaseRelocRef {
 public:
-  BaseRelocRef() : OwningObject(nullptr) {}
+  BaseRelocRef() : OwningObject(nullptr) { ((void) OwningObject);}
   BaseRelocRef(const coff_base_reloc_block_header *Header,
                const COFFObjectFile *Owner)
       : Header(Header), Index(0), OwningObject(Owner) {}

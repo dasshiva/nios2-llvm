@@ -553,6 +553,7 @@ void SimplifyIndvar::simplifyUsers(PHINode *CurrIV, IVVisitor *V) {
 
     Instruction *IVOperand = UseOper.second;
     for (unsigned N = 0; IVOperand; ++N) {
+      ((void) N);
       assert(N <= Simplified.size() && "runaway iteration");
 
       Value *NewOper = foldIVUser(UseOper.first, IVOperand);

@@ -931,7 +931,7 @@ bool DarwinAsmParser::parseVersionMin(StringRef Directive, SMLoc Loc) {
     Update = getLexer().getTok().getIntVal();
   if (Update > 255 || Update < 0)
     return TokError("invalid OS update number");
-    Lex();
+  Lex();
   }
 
   const Triple &T = getContext().getObjectFileInfo()->getTargetTriple();

@@ -3095,6 +3095,7 @@ void BoUpSLP::scheduleBlock(BlockScheduling *BS) {
   // initial instructions.
   int Idx = 0;
   int NumToSchedule = 0;
+  ((void) NumToSchedule);
   for (auto *I = BS->ScheduleStart; I != BS->ScheduleEnd;
        I = I->getNextNode()) {
     ScheduleData *SD = BS->getScheduleData(I);
