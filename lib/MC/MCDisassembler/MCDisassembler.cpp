@@ -13,8 +13,8 @@
 
 using namespace llvm;
 
-MCDisassembler::~MCDisassembler() {
-}
+/*MCDisassembler::~MCDisassembler() {
+} */
 
 bool MCDisassembler::tryAddingSymbolicOperand(MCInst &Inst, int64_t Value,
                                               uint64_t Address, bool IsBranch,

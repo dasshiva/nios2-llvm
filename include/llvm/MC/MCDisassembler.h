@@ -56,7 +56,7 @@ public:
   MCDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx)
     : Ctx(Ctx), STI(STI), Symbolizer(), CommentStream(nullptr) {}
 
-  virtual ~MCDisassembler();
+  virtual ~MCDisassembler() {}
 
   /// Returns the disassembly of a single instruction.
   ///
