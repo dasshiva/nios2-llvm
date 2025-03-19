@@ -64,7 +64,7 @@ namespace {
 
     // StackSlotForVirtReg - Maps virtual regs to the frame index where these
     // values are spilled.
-    IndexedMap<int, VirtReg2IndexFunctor> StackSlotForVirtReg;
+    IndexedMap<int, VirtReg2IndexFunctor<unsigned>> StackSlotForVirtReg;
 
     // Everything we know about a live virtual register.
     struct LiveReg {

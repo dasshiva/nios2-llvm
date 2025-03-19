@@ -205,7 +205,7 @@ class RAGreedy : public MachineFunctionPass,
     RegInfo() : Stage(RS_New), Cascade(0) {}
   };
 
-  IndexedMap<RegInfo, VirtReg2IndexFunctor> ExtraRegInfo;
+  IndexedMap<RegInfo, VirtReg2IndexFunctor<unsigned>> ExtraRegInfo;
 
   LiveRangeStage getStage(const LiveInterval &VirtReg) const {
     return ExtraRegInfo[VirtReg.reg].Stage;

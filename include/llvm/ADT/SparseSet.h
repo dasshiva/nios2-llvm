@@ -122,7 +122,7 @@ class SparseSet {
                 !std::numeric_limits<SparseT>::is_signed,
                 "SparseT must be an unsigned integer type");
 
-  typedef typename KeyFunctorT::argument_type KeyT;
+  typedef typename KeyFunctorT::argument KeyT;
   typedef SmallVector<ValueT, 8> DenseT;
   typedef unsigned size_type;
   DenseT Dense;

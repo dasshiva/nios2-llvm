@@ -480,6 +480,10 @@ void DisassemblerTables::emitModRMDecision(raw_ostream &o1, raw_ostream &o2,
     return;
   }
 
+  /* Prevent unused variable warnings for sTableNumber and sEntryNumber */
+  ((void) sTableNumber);
+  ((void) sEntryNumber);
+
   std::vector<unsigned> ModRMDecision;
 
   switch (dt) {

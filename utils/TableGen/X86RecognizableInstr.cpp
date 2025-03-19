@@ -570,6 +570,9 @@ void RecognizableInstr::emitInstructionSpecifier() {
   if (HasEVEX_K)
     ++additionalOperands;
 
+  // Remove unused variable warnings for additionalOperands
+  ((void) additionalOperands);
+
   switch (Form) {
   default: llvm_unreachable("Unhandled form");
   case X86Local::RawFrmSrc:

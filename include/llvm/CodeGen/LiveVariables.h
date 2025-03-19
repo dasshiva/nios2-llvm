@@ -117,7 +117,7 @@ private:
   /// VirtRegInfo - This list is a mapping from virtual register number to
   /// variable information.
   ///
-  IndexedMap<VarInfo, VirtReg2IndexFunctor> VirtRegInfo;
+  IndexedMap<VarInfo, VirtReg2IndexFunctor<unsigned>> VirtRegInfo;
 
   /// PHIJoins - list of virtual registers that are PHI joins. These registers
   /// may have multiple definitions, and they require special handling when

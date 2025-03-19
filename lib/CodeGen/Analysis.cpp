@@ -666,6 +666,8 @@ static void collectFuncletMembers(
   }
   assert((!IsReturn || NumTerminators == 1) &&
          "Expected only one terminator when a return is present!");
+  // Remove warning for unused variable NumTerminators in Release
+  ((void) NumTerminators);
 
   // Returns are boundaries where funclet transfer can occur, don't follow
   // successors.

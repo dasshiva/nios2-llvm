@@ -60,7 +60,7 @@ private:
   /// Each element in this list contains the register class of the vreg and the
   /// start of the use/def list for the register.
   IndexedMap<std::pair<const TargetRegisterClass*, MachineOperand*>,
-             VirtReg2IndexFunctor> VRegInfo;
+             VirtReg2IndexFunctor<unsigned>> VRegInfo;
 
   /// RegAllocHints - This vector records register allocation hints for virtual
   /// registers. For each virtual register, it keeps a register and hint type
@@ -69,7 +69,7 @@ private:
   /// register for allocation. For example, if the hint is <0, 1024>, it means
   /// the allocator should prefer the physical register allocated to the virtual
   /// register of the hint.
-  IndexedMap<std::pair<unsigned, unsigned>, VirtReg2IndexFunctor> RegAllocHints;
+  IndexedMap<std::pair<unsigned, unsigned>, VirtReg2IndexFunctor<unsigned>> RegAllocHints;
 
   /// PhysRegUseDefLists - This is an array of the head of the use/def list for
   /// physical registers.

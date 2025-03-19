@@ -65,7 +65,7 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
     VNInfo::Allocator VNInfoAllocator;
 
     /// Live interval pointers for all the virtual registers.
-    IndexedMap<LiveInterval*, VirtReg2IndexFunctor> VirtRegIntervals;
+    IndexedMap<LiveInterval*, VirtReg2IndexFunctor<unsigned>> VirtRegIntervals;
 
     /// RegMaskSlots - Sorted list of instructions with register mask operands.
     /// Always use the 'r' slot, RegMasks are normal clobbers, not early

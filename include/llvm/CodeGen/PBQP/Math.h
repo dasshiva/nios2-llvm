@@ -344,14 +344,14 @@ public:
         MinElem = (*this)[R][C];
     return MinElem;
   }
-
+  // Use std::bind in place of std::bind2nd as it is deprecated
   /// \brief Subtracts the given scalar from the elements of the given row.
   Matrix& subFromRow(unsigned R, PBQPNum Val) {
     assert(Rows != 0 && Cols != 0 && Data != nullptr && "Invalid matrix");
     assert(R < Rows && "Row out of bounds");
     std::transform(Data + (R * Cols), Data + ((R + 1) * Cols),
                    Data + (R * Cols),
-                   std::bind2nd(std::minus<PBQPNum>(), Val));
+                   std::bind(std::minus<PBQPNum>(), std::placeholders::_1, Val));
     return *this;
   }
 

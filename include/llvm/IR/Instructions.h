@@ -27,6 +27,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <iterator>
+#include <functional>
 
 namespace llvm {
 
@@ -3928,16 +3929,21 @@ private:
   static const BasicBlock *handler_helper(const Value *V) {
     return cast<BasicBlock>(V);
   }
-
+// DerefFnTy and ConstDerefFnTy are deprecated in C++11
+// Remove them and replace them with std::function - dasshiva
 public:
-  typedef std::pointer_to_unary_function<Value *, BasicBlock *> DerefFnTy;
+  // typedef std::pointer_to_unary_function<Value *, BasicBlock *> DerefFnTy;
+  typedef std::function<BasicBlock*(Value*)> DerefFnTy;
   typedef mapped_iterator<op_iterator, DerefFnTy> handler_iterator;
   typedef iterator_range<handler_iterator> handler_range;
 
 
-  typedef std::pointer_to_unary_function<const Value *, const BasicBlock *>
-      ConstDerefFnTy;
+  //typedef std::pointer_to_unary_function<const Value *, const BasicBlock *>
+  //    ConstDerefFnTy;
+  typedef std::function<const BasicBlock*(const Value*)> ConstDerefFnTy;
+
   typedef mapped_iterator<const_op_iterator, ConstDerefFnTy> const_handler_iterator;
+  
   typedef iterator_range<const_handler_iterator> const_handler_range;
 
   /// Returns an iterator that points to the first handler in CatchSwitchInst.
@@ -3945,7 +3951,8 @@ public:
     op_iterator It = op_begin() + 1;
     if (hasUnwindDest())
       ++It;
-    return handler_iterator(It, DerefFnTy(handler_helper));
+    BasicBlock* (*hh)(Value*) = handler_helper;
+    return handler_iterator(It, DerefFnTy(hh));
   }
   /// Returns an iterator that points to the first handler in the
   /// CatchSwitchInst.
@@ -3953,18 +3960,21 @@ public:
     const_op_iterator It = op_begin() + 1;
     if (hasUnwindDest())
       ++It;
-    return const_handler_iterator(It, ConstDerefFnTy(handler_helper));
+    const BasicBlock* (*hh)(const Value*) = handler_helper;
+    return const_handler_iterator(It, ConstDerefFnTy(hh));
   }
 
   /// Returns a read-only iterator that points one past the last
   /// handler in the CatchSwitchInst.
   handler_iterator handler_end() {
-    return handler_iterator(op_end(), DerefFnTy(handler_helper));
+    BasicBlock* (*hh)(Value*) = handler_helper;
+    return handler_iterator(op_end(), DerefFnTy(hh));
   }
   /// Returns an iterator that points one past the last handler in the
   /// CatchSwitchInst.
   const_handler_iterator handler_end() const {
-    return const_handler_iterator(op_end(), ConstDerefFnTy(handler_helper));
+    const BasicBlock* (*hh)(const Value*) = handler_helper;
+    return const_handler_iterator(op_end(), ConstDerefFnTy(hh));
   }
 
   /// handlers - iteration adapter for range-for loops.

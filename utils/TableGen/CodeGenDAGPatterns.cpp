@@ -239,9 +239,12 @@ bool EEVT::TypeSet::EnforceInteger(TreePattern &TP) {
   TypeSet InputSet(*this);
 
   // Filter out all the fp types.
+  // std::ptr_fun is deprecated in C++11
   TypeVec.erase(std::remove_if(TypeVec.begin(), TypeVec.end(),
-                               std::not1(std::ptr_fun(isInteger))),
-                TypeVec.end());
+        std::not1(std::function<bool(MVT::SimpleValueType)>(isInteger))), 
+                                TypeVec.end());
+                               //std::not1(std::ptr_fun(isInteger))),
+                              //  TypeVec.end());
 
   if (TypeVec.empty()) {
     TP.error("Type inference contradiction found, '" +
@@ -265,8 +268,9 @@ bool EEVT::TypeSet::EnforceFloatingPoint(TreePattern &TP) {
   TypeSet InputSet(*this);
 
   // Filter out all the integer types.
+  // Remove std::ptr_fun it is deprecated in C++11
   TypeVec.erase(std::remove_if(TypeVec.begin(), TypeVec.end(),
-                               std::not1(std::ptr_fun(isFloatingPoint))),
+        std::not1(std::function<bool(MVT::SimpleValueType)>(isFloatingPoint))),
                 TypeVec.end());
 
   if (TypeVec.empty()) {
@@ -293,7 +297,7 @@ bool EEVT::TypeSet::EnforceScalar(TreePattern &TP) {
 
   // Filter out all the vector types.
   TypeVec.erase(std::remove_if(TypeVec.begin(), TypeVec.end(),
-                               std::not1(std::ptr_fun(isScalar))),
+      std::not1(std::function<bool(MVT::SimpleValueType)>(isScalar))),
                 TypeVec.end());
 
   if (TypeVec.empty()) {
@@ -318,7 +322,7 @@ bool EEVT::TypeSet::EnforceVector(TreePattern &TP) {
 
   // Filter out all the scalar types.
   TypeVec.erase(std::remove_if(TypeVec.begin(), TypeVec.end(),
-                               std::not1(std::ptr_fun(isVector))),
+      std::not1(std::function<bool(MVT::SimpleValueType)>(isVector))),
                 TypeVec.end());
 
   if (TypeVec.empty()) {
@@ -1013,8 +1017,8 @@ bool SDTypeConstraint::ApplyTypeConstraint(TreePatternNode *N,
     unsigned OResNo = 0;
     TreePatternNode *OtherNode =
       getOperandNum(x.SDTCisSameAs_Info.OtherOperandNum, N, NodeInfo, OResNo);
-    return NodeToApply->UpdateNodeType(ResNo, OtherNode->getExtType(OResNo),TP)|
-           OtherNode->UpdateNodeType(OResNo,NodeToApply->getExtType(ResNo),TP);
+    return NodeToApply->UpdateNodeType(ResNo, OtherNode->getExtType(OResNo),TP)
+      || OtherNode->UpdateNodeType(OResNo,NodeToApply->getExtType(ResNo),TP);
   }
   case SDTCisVTSmallerThanOp: {
     // The NodeToApply must be a leaf node that is a VT.  OtherOperandNum must

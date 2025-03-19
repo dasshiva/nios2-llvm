@@ -230,10 +230,10 @@ public:
     setValPtr(RHS);
     return getValPtr();
   }
-  ValueTy *operator=(const AssertingVH<ValueTy> &RHS) {
+  /*ValueTy *operator=(const AssertingVH<ValueTy> &RHS) {
     setValPtr(RHS.getValPtr());
     return getValPtr();
-  }
+  } */
 
   ValueTy *operator->() const { return getValPtr(); }
   ValueTy &operator*() const { return *getValPtr(); }

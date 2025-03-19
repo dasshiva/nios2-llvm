@@ -74,14 +74,14 @@ namespace llvm {
   /// compares ValueT's, only unsigned keys. This allows the set to be cleared
   /// between scheduling regions in constant time as long as ValueT does not
   /// require a destructor.
-  typedef SparseSet<VReg2SUnit, VirtReg2IndexFunctor> VReg2SUnitMap;
+  typedef SparseSet<VReg2SUnit, VirtReg2IndexFunctor<unsigned>> VReg2SUnitMap;
 
   /// Track local uses of virtual registers. These uses are gathered by the DAG
   /// builder and may be consulted by the scheduler to avoid iterating an entire
   /// vreg use list.
-  typedef SparseMultiSet<VReg2SUnit, VirtReg2IndexFunctor> VReg2SUnitMultiMap;
+  typedef SparseMultiSet<VReg2SUnit, VirtReg2IndexFunctor<unsigned>> VReg2SUnitMultiMap;
 
-  typedef SparseMultiSet<VReg2SUnitOperIdx, VirtReg2IndexFunctor>
+  typedef SparseMultiSet<VReg2SUnitOperIdx, VirtReg2IndexFunctor<unsigned>>
     VReg2SUnitOperIdxMultiMap;
 
   /// ScheduleDAGInstrs - A ScheduleDAG subclass for scheduling lists of

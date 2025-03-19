@@ -48,17 +48,17 @@ namespace llvm {
     /// it; even spilled virtual registers (the register mapped to a
     /// spilled register is the temporary used to load it from the
     /// stack).
-    IndexedMap<unsigned, VirtReg2IndexFunctor> Virt2PhysMap;
+    IndexedMap<unsigned, VirtReg2IndexFunctor<unsigned>> Virt2PhysMap;
 
     /// Virt2StackSlotMap - This is virtual register to stack slot
     /// mapping. Each spilled virtual register has an entry in it
     /// which corresponds to the stack slot this register is spilled
     /// at.
-    IndexedMap<int, VirtReg2IndexFunctor> Virt2StackSlotMap;
+    IndexedMap<int, VirtReg2IndexFunctor<unsigned>> Virt2StackSlotMap;
 
     /// Virt2SplitMap - This is virtual register to splitted virtual register
     /// mapping.
-    IndexedMap<unsigned, VirtReg2IndexFunctor> Virt2SplitMap;
+    IndexedMap<unsigned, VirtReg2IndexFunctor<unsigned>> Virt2SplitMap;
 
     /// createSpillSlot - Allocate a spill slot for RC from MFI.
     unsigned createSpillSlot(const TargetRegisterClass *RC);

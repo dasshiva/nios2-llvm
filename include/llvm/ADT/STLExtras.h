@@ -33,26 +33,32 @@ namespace llvm {
 //     Extra additions to <functional>
 //===----------------------------------------------------------------------===//
 
-template<class Ty>
-struct identity : public std::unary_function<Ty, Ty> {
-  Ty &operator()(Ty &self) const {
+// Remove std::unary_function as it is deprecated in C++11
+// Change type parameter to argument to support making IndexedMaps
+template<typename T>
+struct identity {//  public std::unary_function<Ty, Ty> {
+  using argument = T;
+  argument &operator()(argument &self) const {
     return self;
   }
-  const Ty &operator()(const Ty &self) const {
+  const argument &operator()(const argument &self) const {
     return self;
   }
 };
 
-template<class Ty>
-struct less_ptr : public std::binary_function<Ty, Ty, bool> {
-  bool operator()(const Ty* left, const Ty* right) const {
+
+// Remove std::binary_function as it is deprecated in C++11
+// Change type parameter to argument to support making IndexedMaps
+template<class argument>
+struct less_ptr { //: public std::binary_function<Ty, Ty, bool> {
+  bool operator()(const argument* left, const argument* right) const {
     return *left < *right;
   }
 };
 
-template<class Ty>
-struct greater_ptr : public std::binary_function<Ty, Ty, bool> {
-  bool operator()(const Ty* left, const Ty* right) const {
+template<class argument>
+struct greater_ptr { //: public std::binary_function<Ty, Ty, bool> {
+  bool operator()(const argument* left, const argument* right) const {
     return *right < *left;
   }
 };

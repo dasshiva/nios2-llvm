@@ -320,7 +320,7 @@ class RegPressureTracker {
   LiveRegSet LiveRegs;
 
   /// Set of vreg defs that start a live range.
-  SparseSet<unsigned, VirtReg2IndexFunctor> UntiedDefs;
+  SparseSet<unsigned, VirtReg2IndexFunctor<unsigned>> UntiedDefs;
   /// Live-through pressure.
   std::vector<unsigned> LiveThruPressure;
 

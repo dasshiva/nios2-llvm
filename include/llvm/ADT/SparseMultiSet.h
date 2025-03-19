@@ -110,7 +110,7 @@ class SparseMultiSet {
     bool isValid() const { return Prev != INVALID; }
   };
 
-  typedef typename KeyFunctorT::argument_type KeyT;
+  typedef typename KeyFunctorT::argument KeyT;
   typedef SmallVector<SMSNode, 8> DenseT;
   DenseT Dense;
   SparseT *Sparse;

@@ -1506,6 +1506,9 @@ void CodeGenRegBank::computeRegUnitWeights() {
                                  NormalUnits, *this);
     }
   }
+
+  // Remove warning for unused variable NumIters
+  ((void)NumIters);
 }
 
 // Find a set in UniqueSets with the same elements as Set.

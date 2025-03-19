@@ -941,8 +941,14 @@ public:
 };
 
 // This is useful when building IndexedMaps keyed on virtual registers
-struct VirtReg2IndexFunctor : public std::unary_function<unsigned, unsigned> {
-  unsigned operator()(unsigned Reg) const {
+// Remove inheritance from std::unary_function as it is deprecated in C++11
+// Howver simply removing this inheritance breaks IndexedMap so we introduce
+// type parameters
+
+template <typename T = unsigned>
+struct VirtReg2IndexFunctor {  //: public std::unary_function<unsigned, unsigned> {
+  using argument = T;
+  unsigned operator()(T Reg) const {
     return TargetRegisterInfo::virtReg2Index(Reg);
   }
 };

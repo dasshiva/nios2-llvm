@@ -404,29 +404,35 @@ template <> struct GraphTraits<CallGraphNode *> {
   typedef CallGraphNode NodeType;
 
   typedef CallGraphNode::CallRecord CGNPairTy;
-  typedef std::pointer_to_unary_function<CGNPairTy, CallGraphNode *>
-  CGNDerefFun;
+  static CallGraphNode *CGNDeref(CGNPairTy P) { return P.second; }
+  //typedef std::pointer_to_unary_function<CGNPairTy, CallGraphNode *>
+  // CGNDerefFun; 
+  // Remove std::pointer_to_unary_function as it is deprecated in C++11
+  typedef std::function<CallGraphNode*(CGNPairTy)> CGNDerefFun;
 
   static NodeType *getEntryNode(CallGraphNode *CGN) { return CGN; }
 
   typedef mapped_iterator<NodeType::iterator, CGNDerefFun> ChildIteratorType;
 
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return map_iterator(N->begin(), CGNDerefFun(CGNDeref));
+    CallGraphNode * (*cgderef)(CGNPairTy) = CGNDeref;
+    return map_iterator(N->begin(), CGNDerefFun(cgderef));
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return map_iterator(N->end(), CGNDerefFun(CGNDeref));
+    CallGraphNode * (*cgderef)(CGNPairTy) = CGNDeref;
+    return map_iterator(N->end(), CGNDerefFun(cgderef));
   }
 
-  static CallGraphNode *CGNDeref(CGNPairTy P) { return P.second; }
 };
 
 template <> struct GraphTraits<const CallGraphNode *> {
   typedef const CallGraphNode NodeType;
-
   typedef CallGraphNode::CallRecord CGNPairTy;
-  typedef std::pointer_to_unary_function<CGNPairTy, const CallGraphNode *>
-      CGNDerefFun;
+  static const CallGraphNode *CGNDeref(CGNPairTy P) { return P.second; }
+ 
+  //typedef std::pointer_to_unary_function<CGNPairTy, const CallGraphNode *>
+  //    CGNDerefFun;
+  typedef std::function<const CallGraphNode*(CGNPairTy)> CGNDerefFun;
 
   static NodeType *getEntryNode(const CallGraphNode *CGN) { return CGN; }
 
@@ -434,14 +440,15 @@ template <> struct GraphTraits<const CallGraphNode *> {
       ChildIteratorType;
 
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return map_iterator(N->begin(), CGNDerefFun(CGNDeref));
+    const CallGraphNode * (*cgderef)(CGNPairTy) = CGNDeref;
+    return map_iterator(N->begin(), CGNDerefFun(cgderef));
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return map_iterator(N->end(), CGNDerefFun(CGNDeref));
+    const CallGraphNode * (*cgderef)(CGNPairTy) = CGNDeref;
+    return map_iterator(N->end(), CGNDerefFun(cgderef));
   }
 
-  static const CallGraphNode *CGNDeref(CGNPairTy P) { return P.second; }
-};
+ };
 
 template <>
 struct GraphTraits<CallGraph *> : public GraphTraits<CallGraphNode *> {
@@ -450,19 +457,21 @@ struct GraphTraits<CallGraph *> : public GraphTraits<CallGraphNode *> {
   }
   typedef std::pair<const Function *const, std::unique_ptr<CallGraphNode>>
       PairTy;
-  typedef std::pointer_to_unary_function<const PairTy &, CallGraphNode &>
-      DerefFun;
+  static CallGraphNode &CGdereference(const PairTy &P) { return *P.second; }
+  //typedef std::pointer_to_unary_function<const PairTy &, CallGraphNode &>
+  //    DerefFun;
 
+  typedef std::function<CallGraphNode&(const PairTy&)> DerefFun;
   // nodes_iterator/begin/end - Allow iteration over all nodes in the graph
   typedef mapped_iterator<CallGraph::iterator, DerefFun> nodes_iterator;
   static nodes_iterator nodes_begin(CallGraph *CG) {
+
     return map_iterator(CG->begin(), DerefFun(CGdereference));
   }
   static nodes_iterator nodes_end(CallGraph *CG) {
     return map_iterator(CG->end(), DerefFun(CGdereference));
   }
 
-  static CallGraphNode &CGdereference(const PairTy &P) { return *P.second; }
 };
 
 template <>
@@ -473,9 +482,9 @@ struct GraphTraits<const CallGraph *> : public GraphTraits<
   }
   typedef std::pair<const Function *const, std::unique_ptr<CallGraphNode>>
       PairTy;
-  typedef std::pointer_to_unary_function<const PairTy &, const CallGraphNode &>
-      DerefFun;
-
+  //typedef std::pointer_to_unary_function<const PairTy &, const CallGraphNode &>
+   //   DerefFun;
+  typedef std::function<const CallGraphNode&(const PairTy&)> DerefFun;
   // nodes_iterator/begin/end - Allow iteration over all nodes in the graph
   typedef mapped_iterator<CallGraph::const_iterator, DerefFun> nodes_iterator;
   static nodes_iterator nodes_begin(const CallGraph *CG) {
