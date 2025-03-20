@@ -50,5 +50,6 @@ DecodeStatus Nios2Disassembler::getInstruction(MCInst &Instr, uint64_t &Size,
                                               raw_ostream &VStream,
                                               raw_ostream &Cstream) const {
   // Stub function
+  Size += 4; // All Nios2 instructions are 4 bytes
   return MCDisassembler::Fail;
 }
