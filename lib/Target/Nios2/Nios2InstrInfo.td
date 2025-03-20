@@ -397,6 +397,21 @@ class CallFR<RegisterClass RC>:
   let rA = 0x1F;
 }
 
+let isTerminator=1, isBarrier=1, Defs=[PC] in
+class Eret<RegisterClass RC>:
+FR<0x3a, 0x1, 0, (outs), (ins RC:$rA), "eret", [], IIBranch> {
+  let rB = 0x1E;
+  let rC = 0;
+  let rA = 0x1D;
+}
+
+class EretImpl<RegisterClass RC>: Eret<RC> {
+  let isReturn = 1;
+  let isCodeGenOnly = 1;
+  let hasCtrlDep = 1;
+  let hasExtraSrcRegAllocReq = 1;
+}
+
 // Return instruction
 class RetBase<RegisterClass RC>: CallFR<RC> {
   let isReturn = 1;
@@ -579,11 +594,13 @@ def BLEU    : CBranchPseudo<"bleu", setule, CPURegs>;
 def CALL  : JumpLink<0, "call">;
 def CALLR : JumpLinkReg<0x3a, 0x1d, "callr", CPURegs>;
 def RET : RetBase<CPURegs>;
+def ERET : RetBase<CPURegs>;
 
 /// Divide Instructions.
 def MUL       : ArithLogicR<0x3a, 0x27, "mul", mul, IIAlu, CPURegs, 1>;
 def MULi      : ArithLogicI<0x24, "muli", mul, simm16, immSExt16, CPURegs>;
 def MULXSS    : ArithLogicR<0x3a, 0x1f, "mulxss", mulhs, IIAlu, CPURegs, 1>;
+def MULXSU    : ArithLogicR<0x3a, 0x17, "mulxsu", mulhs, IIAlu, CPURegs, 1>;
 def MULXUU    : ArithLogicR<0x3a, 0x07, "mulxuu", mulhu, IIAlu, CPURegs, 1>;
 def DIV       : ArithLogicR<0x3a, 0x25, "div", sdiv, IIIdiv, CPURegs>;
 def DIVU      : ArithLogicR<0x3a, 0x24, "divu", udiv, IIIdiv, CPURegs>;
