@@ -120,7 +120,17 @@ class FR<bits<6> op, bits<6> _opxH, bits<5> _shamt, dag outs, dag ins, string as
   let Inst{10-6}  = shamt;
 }
 
-//===----------------------------------------------------------------------===//
+class Trap<dag outs, dag ins, string asmstr, list<dag> pattern,
+  InstrItinClass itin>: InstSE<outs, ins, asmstr, pattern, itin, FrmI>
+{
+  let Inst{31-27} = 0;
+  let Inst{26-22} = 0;
+  let Inst{21-17} = 0x1D;
+  let Inst{16-11} = 0x2D;
+  // let Inst{10-6}  = 0;
+  let Opcode = 0x3A;
+}
+
 // Format J instruction class in Nios2 : <|address|opcode|>
 //===----------------------------------------------------------------------===//
 

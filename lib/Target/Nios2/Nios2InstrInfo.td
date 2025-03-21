@@ -374,6 +374,14 @@ class UncondBranch<bits<6> op, string instr_asm>:
   let Defs = [PC];
 }
 
+def op : Operand<i32>, ImmLeaf<i32, [{return isInt<5>(Imm);}]> {}
+
+let isBranch = 1, hasDelaySlot=1 in
+class TrapInst :
+  Trap<(outs), (ins op:$imm16), "trap\t$imm16", [], NoItinerary> {
+  //let Inst{10-6} = imm16;
+}
+
 // Base class for indirect branch and return instruction classes.
 let isTerminator=1, isBarrier=1, hasDelaySlot = 1 in
 class JumpFR<RegisterClass RC, list<dag> pattern>:
@@ -382,6 +390,14 @@ class JumpFR<RegisterClass RC, list<dag> pattern>:
   let rC = 0;
 }
 
+class NextPCInst<RegisterClass RC>:
+  FR<0x3A, 0x1C, 0, (outs), (ins RC:$rN), "nextpc\t$rN", [], NoItinerary> {
+  let rA = 0;
+  let rB = 0;
+  //let rC = rN;
+}
+
+def NEXTPC : NextPCInst<CPURegs>;
 // Indirect branch
 class IndirectBranch<RegisterClass RC>: JumpFR<RC, [(brind RC:$rA)]> {
   let isBranch = 1;
@@ -397,6 +413,7 @@ class CallFR<RegisterClass RC>:
   let rA = 0x1F;
 }
 
+
 let isTerminator=1, isBarrier=1, Defs=[PC] in
 class Eret<RegisterClass RC>:
 FR<0x3a, 0x1, 0, (outs), (ins RC:$rA), "eret", [], IIBranch> {
@@ -404,6 +421,28 @@ FR<0x3a, 0x1, 0, (outs), (ins RC:$rA), "eret", [], IIBranch> {
   let rC = 0;
   let rA = 0x1D;
 }
+
+class flushp<RegisterClass RC>:
+FR<0x3a, 0x4, 0, (outs), (ins RC:$rA), "flushp", [], NoItinerary> {
+  let rA = 0;
+  let rB = 0;
+  let rC = 0;
+}
+
+class break :
+FR<0x3a, 0x34, 0, (outs), (ins), "break", [], NoItinerary> {
+  let rA = 0;
+  let rB = 0;
+  let rC = 0;
+}
+
+class bret :
+FR<0x3a, 0x9, 0, (outs), (ins), "bret", [], NoItinerary> {
+  let rA = 0x1e;
+  let rB = 0;
+  let rC = 0x1e;
+}
+
 
 class EretImpl<RegisterClass RC>: Eret<RC> {
   let isReturn = 1;
@@ -419,6 +458,7 @@ class RetBase<RegisterClass RC>: CallFR<RC> {
   let hasCtrlDep = 1;
   let hasExtraSrcRegAllocReq = 1;
 }
+
 
 // Jump and Link (Call)
 let isCall=1, hasDelaySlot=1, Defs = [RA] in {
@@ -465,14 +505,14 @@ class CtlInst<dag outs, dag ins, list<dag> pattern, string asm_instr> :
 }
 
 def RDCTL : CtlInst<(outs CPURegs:$rC), (ins CtlRegs:$rCtl), [],
-    "rdctl $rC, $rCtl"> {
+    "rdctl\t$rC, $rCtl"> {
   let rA = 0;
   let rB = 0;
 }
 
 let hasSideEffects = 1 in
 def WRCTL : CtlInst<(outs), (ins CtlRegs:$rCtl, CPURegs:$rA), [],
-    "wrctl $rCtl, $rA"> {
+    "wrctl\t$rCtl, $rA"> {
   let rB = 0;
   let rC = 0;
 }
@@ -515,6 +555,9 @@ def CPRESTORE : Nios2Pseudo<(outs), (ins i32imm:$loc, CPURegs:$gp),
 // Nios2I Instructions
 //===----------------------------------------------------------------------===//
 
+def FLUSHP : flushp<CPURegs>;
+def BREAK  : break;
+def BRET   : bret;
 /// Arithmetic Instructions (ALU Immediate)
 def ADDi    : ArithLogicI<0x04, "addi", add, simm16, immSExt16, CPURegs>;
 def ANDi    : ArithLogicI<0x0c, "andi", and, uimm16, immZExt16, CPURegs>;
@@ -551,6 +594,9 @@ defm CMPGE  : CompareSU<0x08, 0x28, "cmpge", setge, setuge>;
 defm CMPEQ  : CompareS<0x20, "cmpeq", seteq>;
 defm CMPNE  : CompareS<0x18, "cmpne", setne>;
 
+
+// TRAP
+def TRAP  : TrapInst;
 
 /// Load and Store Instructions
 ///  aligned
@@ -593,8 +639,8 @@ def BLEU    : CBranchPseudo<"bleu", setule, CPURegs>;
 
 def CALL  : JumpLink<0, "call">;
 def CALLR : JumpLinkReg<0x3a, 0x1d, "callr", CPURegs>;
-def RET : RetBase<CPURegs>;
-def ERET : RetBase<CPURegs>;
+def RET   : RetBase<CPURegs>;
+def ERET  : EretImpl<CPURegs>;
 
 /// Divide Instructions.
 def MUL       : ArithLogicR<0x3a, 0x27, "mul", mul, IIAlu, CPURegs, 1>;

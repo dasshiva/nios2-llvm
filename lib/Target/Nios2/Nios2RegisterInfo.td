@@ -57,6 +57,22 @@ let Namespace = "Nios2" in {
   def CTL13 : Nios2GPRRegWithAltName<13,"ctl13", ["config"]>;
   def CTL14 : Nios2GPRRegWithAltName<14,"ctl14", ["mpubase"]>;
   def CTL15 : Nios2GPRRegWithAltName<15,"ctl15", ["mpuacc"]>;
+  def CTL16 : Nios2GPRRegWithAltName<16,"ctl16", ["custom0"]>;
+  def CTL17 : Nios2GPRRegWithAltName<17,"ctl17", ["custom1"]>;
+  def CTL18 : Nios2GPRRegWithAltName<18,"ctl18", ["custom2"]>;
+  def CTL19 : Nios2GPRRegWithAltName<19,"ctl19", ["custom3"]>;
+  def CTL20 : Nios2GPRRegWithAltName<20,"ctl20", ["custom4"]>;
+  def CTL21 : Nios2GPRRegWithAltName<21,"ctl21", ["custom5"]>;
+  def CTL22 : Nios2GPRRegWithAltName<22,"ctl22", ["custom6"]>;
+  def CTL23 : Nios2GPRRegWithAltName<23,"ctl23", ["custom7"]>;
+  def CTL24 : Nios2GPRRegWithAltName<23,"ctl24", ["custom8"]>;
+  def CTL25 : Nios2GPRRegWithAltName<25,"ctl25", ["custom9"]>;
+  def CTL26 : Nios2GPRRegWithAltName<26,"ctl26", ["custom10"]>;
+  def CTL27 : Nios2GPRRegWithAltName<27,"ctl27", ["custom11"]>;
+  def CTL28 : Nios2GPRRegWithAltName<28,"ctl28", ["custom12"]>;
+  def CTL29 : Nios2GPRRegWithAltName<29,"ctl29", ["custom13"]>;
+  def CTL30 : Nios2GPRRegWithAltName<30,"ctl30", ["custom14"]>;
+  def CTL31 : Nios2GPRRegWithAltName<31,"ctl31", ["custom15"]>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -80,7 +96,8 @@ let isAllocatable = 0 in
 def CtlRegs : RegisterClass<"Nios2", [i32], 32,
     (add (sequence "CTL%u", 0, 5),
          (sequence "CTL%u", 7, 10),
-         (sequence "CTL%u", 12, 15))>;
+         (sequence "CTL%u", 12, 15),
+         (sequence "CTL%u", 16, 31))>;
 
 // Remove r31 (aka RA) & PC registers
 def JMPRegs : RegisterClass<"Nios2", [i32], 32, (trunc CPURegs, 31)>;

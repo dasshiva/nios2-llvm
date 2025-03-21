@@ -844,6 +844,8 @@ StringRef ELFObjectFile<ELFT>::getFileFormatName() const {
       return "ELF32-sparc";
     case ELF::EM_WEBASSEMBLY:
       return "ELF32-wasm";
+    case ELF::EM_ALTERA_NIOS2:
+      return "ELF32-nios2";
     default:
       return "ELF32-unknown";
     }
@@ -918,7 +920,11 @@ unsigned ELFObjectFile<ELFT>::getArch() const {
     case ELF::ELFCLASS64: return Triple::wasm64;
     default: return Triple::UnknownArch;
     }
-
+  case ELF::EM_ALTERA_NIOS2:
+    switch(EF.getHeader()->e_ident[ELF::EI_CLASS]) {
+      case ELF::ELFCLASS32: return Triple::nios2;
+      default: report_fatal_error("Invalid ELFCLASS!");
+    }
   default:
     return Triple::UnknownArch;
   }

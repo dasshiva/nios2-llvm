@@ -73,7 +73,6 @@ const char *Triple::getArchTypePrefix(ArchType Kind) {
   switch (Kind) {
   default:
     return nullptr;
-
   case aarch64:
   case aarch64_be:  return "aarch64";
 
