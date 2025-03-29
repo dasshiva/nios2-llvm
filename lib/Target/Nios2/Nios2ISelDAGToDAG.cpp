@@ -305,7 +305,6 @@ SDNode* Nios2DAGToDAGISel::Select(SDNode *Node) {
 
   switch(Opcode) {
   default: break;
-
   case ISD::SUBE:
   case ISD::ADDE: {
     SDValue InFlag = Node->getOperand(2), CmpLHS;
