@@ -39,7 +39,7 @@ public:
   Nios2MCInstLower MCInstLowering;
 
   explicit Nios2AsmPrinter(TargetMachine &TM, 
-                           std::unique_ptr<MCStreamer> &Streamer)
+                           std::unique_ptr<MCStreamer> Streamer)
     : AsmPrinter(TM, std::move(Streamer)), MCInstLowering(*this) {}
 
   virtual const char *getPassName() const {
